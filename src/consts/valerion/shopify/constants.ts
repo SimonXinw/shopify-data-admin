@@ -1,0 +1,9 @@
+export const VALERION_SHOPIFY_STOREFRONT_API_VERSION = "2025-10";
+export const VALERION_SHOPIFY_ADMIN_API_VERSION = "2025-10";
+export const VALERION_SHOPIFY_ADMIN_DEV_DASHBOARD_API_VERSION = "2026-01";
+
+export const VALERION_SHOPIFY_ENDPOINTS = {
+  storefront: `/api/${VALERION_SHOPIFY_STOREFRONT_API_VERSION}/graphql.json`,
+  admin: `/admin/api/${VALERION_SHOPIFY_ADMIN_API_VERSION}/graphql.json`,
+  adminDevDashboard: `/admin/api/${VALERION_SHOPIFY_ADMIN_DEV_DASHBOARD_API_VERSION}/graphql.json`,
+} as const;
