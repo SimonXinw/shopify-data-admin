@@ -34,3 +34,7 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+参考这个项目的 shopify 调用@valerion，写入这个@xw/shopify/backend/shopify-data-admin 项目。
+1.@valerion/src/utils/function/lib/klaviyo @valerion/src/utils/function/lib/shopify 复制一份到@xw/shopify/backend/shopify-data-admin/lib 里面去，对应的其他文件引用的变量按照规范放到@xw/shopify/backend/shopify-data-admin/src/consts 。
+2.提供一个路由，写一个界面可以批量上传图片，然后上传到shopify 里面去
