@@ -1,0 +1,8 @@
+---
+description: 改动对外可见事实（目录、页面、API、env、依赖、对外导出模块）时同步 README.md / .example.env
+alwaysApply: false
+globs:
+  - "**"
+---
+
+改动「对外可见的事实」必须同步文档，判定与流程见 [`.cursor/skills/sync-docs/SKILL.md`](mdc:.cursor/skills/sync-docs/SKILL.md)。
