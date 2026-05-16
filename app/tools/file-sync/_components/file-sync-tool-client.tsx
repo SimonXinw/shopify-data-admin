@@ -1,5 +1,7 @@
 "use client";
 
+import "../file-sync-scroll.css";
+
 import { memo, useCallback, useEffect, useMemo, useState, startTransition } from "react";
 import { toast } from "sonner";
 import { CustomSelect } from "@/components/data-entry/custom-select";
@@ -471,16 +473,53 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-1.5 md:flex-row md:items-baseline md:gap-3">
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">跨站点图片同步</h1>
-        <span className="hidden text-zinc-300 md:block">|</span>
-        <p className="text-xs text-zinc-500">
-          从源站点读取 Shopify Files 图片列表，按需选择后批量同步到目标站点，并查看同步结果与目标 CDN。
-        </p>
+    <div className="mx-auto flex min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-4 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm">
+      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
+        <div className="flex flex-col gap-1.5 md:flex-row md:items-baseline md:gap-3">
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">跨站点图片同步</h1>
+          <span className="hidden text-zinc-300 md:block">|</span>
+          <p className="text-xs text-zinc-500">
+            从源站点读取 Shopify Files 图片列表，按需选择后批量同步到目标站点，并查看同步结果与目标 CDN。
+          </p>
+        </div>
+
+        <div className="relative grid min-w-[220px] shrink-0 grid-cols-2 items-center rounded-lg bg-zinc-300/80 p-1.5 shadow-[inset_0_3px_9px_rgba(0,0,0,0.22),inset_0_0_4px_rgba(0,0,0,0.14),inset_0_-1px_0_rgba(255,255,255,0.42),0_1px_0_rgba(255,255,255,0.85)]">
+          <div
+            className={`absolute bottom-1.5 left-1.5 top-1.5 w-[calc(50%-6px)] rounded-[6px] bg-[linear-gradient(180deg,#f1f1f3_0%,#e7e7ea_52%,#d8d9dd_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.92),inset_0_-1px_0_rgba(0,0,0,0.16),0_0_0_1px_rgba(82,82,91,0.16),0_1px_1px_rgba(0,0,0,0.12)] will-change-transform transition-transform duration-300 ease-out ${
+              activeTab === "files" ? "translate-x-0" : "translate-x-full"
+            }`}
+          />
+          <button
+            type="button"
+            onClick={() => handleTabChange("files")}
+            className={`relative z-10 flex cursor-pointer items-center justify-center gap-1.5 rounded-[6px] px-2.5 py-1.5 text-xs font-medium transition-colors duration-300 ${
+              activeTab === "files" ? "text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            图片列表
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange("history")}
+            className={`relative z-10 flex cursor-pointer items-center justify-center gap-1.5 rounded-[6px] px-2.5 py-1.5 text-xs font-medium transition-colors duration-300 ${
+              activeTab === "history" ? "text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            同步历史
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] transition-all duration-300 ${
+                activeTab === "history"
+                  ? "bg-zinc-200/80 text-zinc-800 shadow-[inset_0_1px_3px_rgba(0,0,0,0.15),0_1px_0_rgba(255,255,255,0.8)]"
+                  : "bg-zinc-300/50 text-zinc-500"
+              }`}
+            >
+              {syncHistoryCount}
+            </span>
+          </button>
+        </div>
       </div>
 
-      <div className="grid gap-2 rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end lg:grid-cols-[1fr_2fr_auto]">
+      <div className="grid shrink-0 gap-2 rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end lg:grid-cols-[1fr_2fr_auto]">
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700">
           源站点
           <CustomSelect
@@ -542,84 +581,68 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
         </button>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="relative grid min-w-[220px] grid-cols-2 items-center overflow-hidden rounded-lg bg-zinc-300/80 p-1.5 shadow-[inset_0_3px_9px_rgba(0,0,0,0.22),inset_0_0_4px_rgba(0,0,0,0.14),inset_0_-1px_0_rgba(255,255,255,0.42),0_1px_0_rgba(255,255,255,0.85)]">
-          {/* 单层台阶滑块：用锐利边缘和明暗落差表达从底槽凸起 */}
-          <div
-            className={`absolute bottom-1.5 left-1.5 top-1.5 w-[calc(50%-6px)] rounded-[6px] bg-[linear-gradient(180deg,#f1f1f3_0%,#e7e7ea_52%,#d8d9dd_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.92),inset_0_-1px_0_rgba(0,0,0,0.16),0_0_0_1px_rgba(82,82,91,0.16),0_1px_1px_rgba(0,0,0,0.12)] will-change-transform transition-transform duration-300 ease-out ${
-              activeTab === "files" ? "translate-x-0" : "translate-x-full"
-            }`}
-          />
+      <div className={activeTab === "files" ? "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pt-1" : "hidden"} aria-hidden={activeTab !== "files"}>
+          {/* 控制台：筛选 + 统计 + 操作 合并到单行 */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-zinc-200/60 bg-zinc-50/50 px-2 py-1.5 shadow-sm">
+            <input
+              type="text"
+              value={nameKeyword}
+              onChange={(event) => {
+                setNameKeyword(event.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="按文件名或 Alt 筛选"
+              className="h-8 w-[180px] rounded-md border border-zinc-200 bg-white px-2.5 text-xs shadow-sm outline-none transition-colors hover:border-zinc-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+            />
+            <label className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-700 shadow-sm transition-colors hover:border-zinc-300">
+              <input
+                type="checkbox"
+                checked={onlyReady}
+                onChange={(event) => {
+                  setOnlyReady(event.target.checked);
+                  setCurrentPage(1);
+                }}
+                className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-indigo-600 shadow-sm transition-colors focus:ring-indigo-500 focus:ring-offset-0"
+              />
+              仅 READY
+            </label>
 
-          <button
-            type="button"
-            onClick={() => handleTabChange("files")}
-            className={`relative z-10 flex cursor-pointer items-center justify-center gap-1.5 rounded-[6px] px-2.5 py-2 text-xs font-medium transition-colors duration-300 ${
-              activeTab === "files" ? "text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
-            }`}
-          >
-            图片列表
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange("history")}
-            className={`relative z-10 flex cursor-pointer items-center justify-center gap-1.5 rounded-[6px] px-2.5 py-2 text-xs font-medium transition-colors duration-300 ${
-              activeTab === "history" ? "text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
-            }`}
-          >
-            同步历史
-            <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] transition-all duration-300 ${
-                activeTab === "history"
-                  ? "bg-zinc-200/80 text-zinc-800 shadow-[inset_0_1px_3px_rgba(0,0,0,0.15),0_1px_0_rgba(255,255,255,0.8)]"
-                  : "bg-zinc-300/50 text-zinc-500"
-              }`}
-            >
-              {syncHistoryCount}
-            </span>
-          </button>
-        </div>
-        <div className="hidden text-[11px] text-zinc-400 sm:block">
-          {activeTab === "files" ? "勾选需要跨站同步的图片" : "成功同步的图片映射记录"}
-        </div>
-      </div>
-
-      <div className={activeTab === "files" ? "flex flex-col gap-3 pt-1" : "hidden"} aria-hidden={activeTab !== "files"}>
-          {/* 控制台：筛选与操作 */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-2 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex min-w-[200px] items-center gap-1">
-                <input
-                  type="text"
-                  value={nameKeyword}
-                  onChange={(event) => {
-                    setNameKeyword(event.target.value);
-                    setCurrentPage(1);
-                  }}
-                  placeholder="按文件名或 Alt 筛选"
-                  className="h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 text-xs shadow-sm outline-none transition-all hover:border-zinc-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                />
-              </div>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 shadow-sm transition-all hover:border-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={onlyReady}
-                  onChange={(event) => {
-                    setOnlyReady(event.target.checked);
-                    setCurrentPage(1);
-                  }}
-                  className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-indigo-600 shadow-sm transition-colors focus:ring-indigo-500 focus:ring-offset-0"
-                />
-                仅 READY
-              </label>
+            <div className="flex items-center gap-2 px-1 text-[11px] text-zinc-500">
+              <span>共 {items.length}</span>
+              <span className="text-zinc-300">·</span>
+              <span>筛选 <span className="font-medium text-zinc-700">{filteredItems.length}</span></span>
+              <span className="text-zinc-300">·</span>
+              <span>已选 <span className="font-medium text-indigo-600">{selectedCount}</span></span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <label className="flex items-center gap-1 text-[11px] text-zinc-500">
+                每页
+                <CustomSelect
+                  value={String(pageSize)}
+                  options={[
+                    { label: "50", value: "50" },
+                    { label: "100", value: "100" },
+                    { label: "200", value: "200" },
+                  ]}
+                  onChange={(val) => {
+                    setPageSize(Number(val));
+                    setCurrentPage(1);
+                  }}
+                  className="h-7 cursor-pointer rounded-md border border-zinc-200 bg-white px-2 text-[11px] shadow-sm outline-none transition-colors hover:border-zinc-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
+                />
+              </label>
+              <span className="text-[11px] text-zinc-500">
+                第 <span className="font-medium text-zinc-700">{normalizedPage}</span>/{totalPages}
+              </span>
+
+              <span className="mx-1 h-5 w-px bg-zinc-200" />
+
               <button
                 type="button"
                 onClick={toggleAllOnPage}
                 disabled={pagedItems.length < 1}
-                className="h-9 cursor-pointer rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                className="h-8 cursor-pointer rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
               >
                 {allSelectedOnPage ? "取消全选" : "全选本页"}
               </button>
@@ -627,7 +650,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
                 type="button"
                 onClick={() => setSelectedIds([])}
                 disabled={selectedCount < 1}
-                className="h-9 cursor-pointer rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                className="h-8 cursor-pointer rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
               >
                 清空
               </button>
@@ -635,7 +658,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
                 type="button"
                 onClick={handleRetryFailed}
                 disabled={isSyncing || !syncSummary || syncSummary.failedCount < 1}
-                className="h-9 cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-800 shadow-sm transition-all hover:bg-amber-100 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                className="h-8 cursor-pointer rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-800 shadow-sm transition-colors hover:bg-amber-100 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
               >
                 重试失败
               </button>
@@ -643,7 +666,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
                 type="button"
                 onClick={handleSync}
                 disabled={isSyncing || selectedCount < 1 || targetSiteCodes.length < 1}
-                className="h-9 cursor-pointer rounded-lg bg-indigo-600 px-4 text-xs font-medium text-white shadow-sm transition-all hover:bg-indigo-700 hover:shadow active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                className="h-8 cursor-pointer rounded-md bg-indigo-600 px-3 text-xs font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
               >
                 {isSyncing ? (
                   <span className="flex items-center gap-1.5">
@@ -662,51 +685,21 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
             </div>
           </div>
 
-          {/* 列表信息与分页 */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-zinc-500">
-            <div className="flex gap-3">
-              <span>共 {items.length} 项</span>
-              <span>筛选后 <span className="font-medium text-zinc-700">{filteredItems.length}</span></span>
-              <span>已选 <span className="font-medium text-indigo-600">{selectedCount}</span></span>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5">
-                每页
-                <CustomSelect
-                  value={String(pageSize)}
-                  options={[
-                    { label: "50", value: "50" },
-                    { label: "100", value: "100" },
-                    { label: "200", value: "200" },
-                  ]}
-                  onChange={(val) => {
-                    setPageSize(Number(val));
-                    setCurrentPage(1);
-                  }}
-                  className="h-7 cursor-pointer rounded-md border border-zinc-200 bg-white px-2 text-[11px] shadow-sm outline-none transition-all hover:border-zinc-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
-                />
-              </label>
-              <span>
-                第 <span className="font-medium text-zinc-700">{normalizedPage}</span>/{totalPages} 页
-              </span>
-            </div>
-          </div>
-
-      {/* 列表 */}
-      <div className="flex flex-col gap-1.5">
-        {pagedItems.map((item) => (
-          <FileListRow key={item.id} item={item} checked={selectedIdSet.has(item.id)} onToggle={toggleSingle} />
-        ))}
-      </div>
-
+      {/* 列表：仅在容器内滚动 */}
+      <div className="file_sync_scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-lg border border-zinc-200/50 bg-zinc-50/30 p-1.5">
         {filteredItems.length < 1 && !isLoadingFiles ? (
-          <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+          <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
             当前筛选条件下没有可展示的图片文件，或账号缺少 `read_files` 权限。
           </div>
-        ) : null}
+        ) : (
+          pagedItems.map((item) => (
+            <FileListRow key={item.id} item={item} checked={selectedIdSet.has(item.id)} onToggle={toggleSingle} />
+          ))
+        )}
+      </div>
 
         {filteredItems.length > 0 ? (
-          <div className="mt-4 flex items-center justify-end gap-2">
+          <div className="flex shrink-0 items-center justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
@@ -730,9 +723,9 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
         ) : null}
       </div>
 
-      <div className={activeTab === "history" ? "flex flex-col gap-3 pt-1" : "hidden"} aria-hidden={activeTab !== "history"}>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-2 shadow-sm">
-            <div className="px-2 text-xs font-medium text-zinc-700">
+      <div className={activeTab === "history" ? "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pt-1" : "hidden"} aria-hidden={activeTab !== "history"}>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200/60 bg-zinc-50/50 px-2 py-1.5 shadow-sm">
+            <div className="px-1 text-xs font-medium text-zinc-700">
               成功记录 <span className="text-indigo-600">{syncHistoryCount}</span> 条
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -768,7 +761,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
               暂无成功同步记录。同步成功后，这里会显示图片、旧 CDN、新 CDN 和大小。
             </div>
           ) : (
-            <div className="flex max-h-[520px] flex-col gap-2 overflow-y-auto pr-1">
+            <div className="file_sync_scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-lg border border-zinc-200/50 bg-zinc-50/30 p-1.5">
               {syncHistoryItems.map((item) => (
                 <div
                   key={item.id}
@@ -861,16 +854,16 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
       </div>
 
       {errorMessage ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-800 shadow-sm">{errorMessage}</div>
+        <div className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-800 shadow-sm">{errorMessage}</div>
       ) : null}
 
       {syncSummary ? (
-        <div className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 shadow-sm transition-all">
+        <div className="shrink-0 space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 shadow-sm">
           <div className="text-[11px] font-medium text-zinc-700">
             结果：共 {syncSummary.totalCount} 条 · 成功 <span className="text-emerald-600">{syncSummary.successCount}</span> · 失败 <span className="text-amber-600">{syncSummary.failedCount}</span>
           </div>
 
-          <div className="grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="file_sync_scroll grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {syncSummary.results.map((result) => (
               <div
                 key={`${result.sourceFileId}-${result.targetSiteCode}`}

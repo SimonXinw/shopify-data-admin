@@ -12,8 +12,8 @@ export default function FileSyncToolPage() {
   const siteOptions = listAvailableSiteOptions();
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-4 py-8 md:px-8">
-      <div className="mx-auto mb-5 flex w-full max-w-[1400px] items-center gap-2">
+    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-zinc-50 px-4 py-8 md:px-8">
+      <div className="mx-auto mb-5 flex w-full max-w-[1400px] shrink-0 items-center gap-2">
         <Link
           href="/"
           className="inline-flex items-center rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
