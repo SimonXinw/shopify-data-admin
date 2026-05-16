@@ -3,6 +3,7 @@
 import "../file-sync-scroll.css";
 
 import { memo, useCallback, useEffect, useMemo, useState, startTransition } from "react";
+import { CircleHelp } from "lucide-react";
 import { toast } from "sonner";
 import { CustomSelect } from "@/components/data-entry/custom-select";
 import {
@@ -474,13 +475,22 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-4 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm">
-      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
-        <div className="flex flex-col gap-1.5 md:flex-row md:items-baseline md:gap-3">
+      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-start md:gap-4">
+        <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900">跨站点图片同步</h1>
-          <span className="hidden text-zinc-300 md:block">|</span>
-          <p className="text-xs text-zinc-500">
-            从源站点读取 Shopify Files 图片列表，按需选择后批量同步到目标站点，并查看同步结果与目标 CDN。
-          </p>
+          <div className="group relative">
+            <button
+              type="button"
+              aria-label="查看功能说明"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 transition-colors hover:text-zinc-600"
+            >
+              <CircleHelp className="h-4 w-4" />
+            </button>
+            <div className="pointer-events-none absolute left-0 top-7 z-20 hidden w-[360px] rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs leading-relaxed text-zinc-600 shadow-lg group-hover:block">
+              <div className="absolute -top-1 left-2 h-2 w-2 rotate-45 border-l border-t border-zinc-200 bg-white" />
+              从源站点读取 Shopify Files 图片列表，按需选择后批量同步到目标站点，并查看同步结果与目标 CDN。
+            </div>
+          </div>
         </div>
 
         <div className="relative grid min-w-[220px] shrink-0 grid-cols-2 items-center rounded-lg bg-zinc-300/80 p-1.5 shadow-[inset_0_3px_9px_rgba(0,0,0,0.22),inset_0_0_4px_rgba(0,0,0,0.14),inset_0_-1px_0_rgba(255,255,255,0.42),0_1px_0_rgba(255,255,255,0.85)]">
