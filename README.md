@@ -73,6 +73,8 @@ shopify-data-admin/
 │  │  └─ shopify.ts        # 本工具的 Shopify 常量（API 路径、单批文件上限等）
 │  └─ shopify/
 │     ├─ admin-client.ts   # 统一发起 Admin GraphQL 请求，处理错误
+│     ├─ storefront.ts     # Storefront GraphQL 聚合导出（对外优先从此 import）
+│     ├─ storefront/       # Storefront 业务封装（购物车、商品等）
 │     ├─ files.ts          # 单站点批量上传逻辑（stagedUploadsCreate → upload → fileCreate）
 │     └─ file-sync.ts      # 跨站点文件列表与同步逻辑
 ├─ src/

@@ -6,6 +6,7 @@ export const SHOPIFY_FILE_BATCH_LIMIT = 50;
 
 export const SHOPIFY_ENDPOINT_PATHS = {
   adminGraphql: VALERION_SHOPIFY_ENDPOINTS.admin,
+  storefrontGraphql: VALERION_SHOPIFY_ENDPOINTS.storefront,
 } as const;
 
 export const DEFAULT_UPLOAD_TIMEOUT_MS = 30_000;
