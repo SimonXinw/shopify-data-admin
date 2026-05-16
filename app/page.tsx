@@ -7,11 +7,11 @@ export default function Home() {
         <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h1 className="text-3xl font-semibold text-zinc-900">Shopify Data Admin</h1>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-zinc-600">
-            用于跨站点的数据工具控制台。当前先提供 Shopify Files 批量图片上传功能，后续会扩展元字段、元对象、产品数据处理与跨店铺同步能力。
+            用于跨站点的数据工具控制台。当前提供 Shopify Files 批量图片上传、跨站图片同步与跨站产品同步；后续可扩展元字段、元对象等更多跨店铺数据治理能力。
           </p>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2">
+        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-medium uppercase tracking-wider text-indigo-600">工具 01</div>
             <h2 className="mt-2 text-xl font-semibold text-zinc-900">批量上传图片到 Shopify</h2>
@@ -36,6 +36,21 @@ export default function Home() {
 
             <Link
               href="/tools/file-sync"
+              className="mt-5 inline-flex items-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+            >
+              进入工具
+            </Link>
+          </article>
+
+          <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <div className="text-xs font-medium uppercase tracking-wider text-indigo-600">工具 03</div>
+            <h2 className="mt-2 text-xl font-semibold text-zinc-900">跨站点产品同步</h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-600">
+              从源站点拉取产品列表，多选后同步到目标站点；自动避让已占用的 handle，并复制变体、图片与元字段（受 API 与目标站 metafield 定义限制）。
+            </p>
+
+            <Link
+              href="/tools/product-sync"
               className="mt-5 inline-flex items-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
             >
               进入工具

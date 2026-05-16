@@ -21,6 +21,12 @@ export default function FileSyncToolPage() {
           返回首页
         </Link>
         <Link
+          href="/tools/product-sync"
+          className="inline-flex items-center rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
+        >
+          产品同步
+        </Link>
+        <Link
           href="/tools/image-upload"
           className="inline-flex items-center rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
         >

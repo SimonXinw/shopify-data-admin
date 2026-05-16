@@ -1,0 +1,14 @@
+---
+description: UI 组件与页面样式使用 shadcn/ui 基座并靠近 Shopify Polaris 灰色调
+globs: app/**/*.tsx,components/**/*.tsx,app/globals.css
+alwaysApply: false
+---
+
+# UI 风格与组件约定
+
+- 优先使用 `components/ui/*` 的 shadcn/ui 风格基础组件；复杂交互（Select/Dialog/Tooltip/Toast 等）不要手写焦点、键盘、弹层逻辑。
+- 业务封装放到分类目录，如 `components/data-entry/*`；页面私有组件仍放对应路由 `_components/`。
+- 视觉靠近 Shopify Polaris：灰白底、低饱和边框、轻阴影、圆角中等、紧凑间距；主色优先用黑/灰，少量 `indigo` 只做焦点/选中提示。
+- 使用 `app/globals.css` 的主题变量（`background`、`border`、`input`、`ring`、`muted` 等），不要在页面里发明新的大面积主题色。
+- 可点击元素必须有明确鼠标手势与状态：`cursor-pointer`、`hover`、`focus-visible`、`disabled`、`active`；整行可选列表要避免子按钮冒泡误触。
+- 保持轻量渐进：只按需引入 shadcn/Radix 组件，不引入 Antd/Polaris 这类重型全套 UI 库，除非用户明确要求。

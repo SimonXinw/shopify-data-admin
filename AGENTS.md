@@ -11,3 +11,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 判定与映射细则、何时不需要更新文档，见 `.cursor/skills/sync-docs/SKILL.md`。
 <!-- END:keep-docs-in-sync -->
+
+<!-- BEGIN:ui-style-rule -->
+# UI 风格约定
+
+改 `app/**/*.tsx`、`components/**/*.tsx` 或 `app/globals.css` 时，遵循 `.cursor/rules/polaris-shadcn-ui.mdc`：shadcn/ui 基座 + Shopify Polaris 灰色调，复杂交互优先用 Radix/shadcn。
+<!-- END:ui-style-rule -->

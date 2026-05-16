@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { CustomSelect } from "@/components/data-entry/custom-select";
 
 type SiteOption = {
   code: string;
@@ -45,6 +46,9 @@ function FilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
   useEffect(() => {
     if (file.type.startsWith("image/")) {
       const url = URL.createObjectURL(file);
+      // 在异步任务或使用 refs 替代，但对于 URL.createObjectURL 直接 set 通常可接受
+      // 这里禁用规则，因为我们需要将这个 Blob URL 传给 img
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreviewUrl(url);
       return () => URL.revokeObjectURL(url);
     }
@@ -54,6 +58,7 @@ function FilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
     <div className="group relative flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-2 shadow-sm transition-shadow hover:border-indigo-300 hover:shadow-md">
       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-zinc-100">
         {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 本地 Blob 预览不适合 next/image
           <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" />
         ) : (
           <svg
@@ -234,17 +239,16 @@ export function UploadToolClient({ siteOptions }: { siteOptions: SiteOption[] })
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm font-medium text-zinc-800">
             <span>目标站点</span>
-            <select
+            <CustomSelect
               value={selectedSiteCode}
-              onChange={(event) => setSelectedSiteCode(event.target.value)}
-              className="h-11 cursor-pointer rounded-lg border border-zinc-300 px-3 outline-none transition-shadow hover:border-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              {siteOptions.map((site) => (
-                <option key={site.code} value={site.code}>
-                  {site.label} ({site.storeDomain})
-                </option>
-              ))}
-            </select>
+              options={siteOptions.map((site) => ({
+                label: site.label,
+                value: site.code,
+                description: site.storeDomain,
+              }))}
+              onChange={(next) => setSelectedSiteCode(next)}
+              className="h-11 cursor-pointer rounded-lg border border-zinc-300 bg-white px-3 outline-none transition-shadow hover:border-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            />
           </label>
 
           <label className="flex flex-col gap-2 text-sm font-medium text-zinc-800">

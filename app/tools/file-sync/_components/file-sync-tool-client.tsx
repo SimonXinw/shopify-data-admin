@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { CustomSelect } from "@/components/data-entry/custom-select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type SiteOption = {
   code: string;
@@ -73,10 +83,31 @@ const datetimeToReadable = (iso: string): string => {
   });
 };
 
+const buildSyncSuccessToastMessage = (
+  results: SyncResultItem[],
+  siteOptions: SiteOption[],
+): string | null => {
+  const successfulResults = results.filter((result) => result.success);
+  if (successfulResults.length < 1) {
+    return null;
+  }
+
+  const syncedFileCount = new Set(successfulResults.map((result) => result.sourceFileId)).size;
+  const syncedSiteLabels = Array.from(new Set(successfulResults.map((result) => result.targetSiteCode)))
+    .map((code) => siteOptions.find((site) => site.code === code)?.label ?? code.toUpperCase())
+    .join("、");
+
+  return `已同步 ${syncedFileCount} 张图片到 ${syncedSiteLabels} 成功`;
+};
+
 export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] }) {
   const FETCH_LIMIT = 250;
   const [sourceSiteCode, setSourceSiteCode] = useState(siteOptions[0]?.code ?? "");
-  const [targetSiteCodes, setTargetSiteCodes] = useState<string[]>([]);
+  const [targetSiteCodes, setTargetSiteCodes] = useState<string[]>(() => {
+    const src = siteOptions[0]?.code;
+    const other = siteOptions.find((s) => s.code !== src);
+    return other ? [other.code] : [];
+  });
   const [items, setItems] = useState<SiteImageItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [onlyReady, setOnlyReady] = useState(true);
@@ -124,10 +155,6 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelectedOnPage = pagedItems.length > 0 && pagedItems.every((item) => selectedIdSet.has(item.id));
 
-  const selectedItems = useMemo(() => {
-    return items.filter((item) => selectedIdSet.has(item.id));
-  }, [items, selectedIdSet]);
-
   const loadFiles = async (siteCode: string) => {
     if (!siteCode) {
       setItems([]);
@@ -172,23 +199,16 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
   };
 
   useEffect(() => {
-    const defaultTargetCode = selectableTargetSites[0]?.code;
-    setTargetSiteCodes(defaultTargetCode ? [defaultTargetCode] : []);
-  }, [sourceSiteCode, selectableTargetSites]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [onlyReady, nameKeyword, pageSize]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
+    const code = siteOptions[0]?.code ?? "";
+    if (!code) {
+      return;
     }
-  }, [currentPage, totalPages]);
 
-  useEffect(() => {
-    void loadFiles(sourceSiteCode);
-  }, [sourceSiteCode]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 挂载时预拉取图片列表
+    void loadFiles(code);
+    // siteOptions 来自服务端 page，首屏稳定
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleSingle = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
@@ -240,6 +260,11 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
       }
 
       setSyncSummary(body);
+
+      const successToastMessage = buildSyncSuccessToastMessage(body.results, siteOptions);
+      if (successToastMessage) {
+        toast.success(successToastMessage);
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "同步失败，请稍后重试。");
     } finally {
@@ -292,42 +317,48 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-zinc-900">跨站点图片同步</h1>
-        <p className="text-sm text-zinc-600">
+    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-sm transition-all duration-300">
+      <div className="space-y-1">
+        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">跨站点图片同步</h1>
+        <p className="text-sm leading-relaxed text-zinc-500">
           从源站点读取 Shopify Files 图片列表，按需选择后批量同步到目标站点，并查看同步结果与目标 CDN。
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
-        <label className="grid gap-2 text-sm font-medium text-zinc-800">
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end lg:grid-cols-[1fr_2fr_auto]">
+        <label className="grid gap-1 text-sm font-medium text-zinc-700">
           源站点
-          <select
+          <CustomSelect
             value={sourceSiteCode}
-            onChange={(event) => setSourceSiteCode(event.target.value)}
-            className="h-11 cursor-pointer rounded-lg border border-zinc-300 px-3 outline-none ring-indigo-500 focus:ring-2"
-          >
-            {siteOptions.map((site) => (
-              <option key={site.code} value={site.code}>
-                {site.label} ({site.storeDomain})
-              </option>
-            ))}
-          </select>
+            options={siteOptions.map((site) => ({
+              label: site.label,
+              value: site.code,
+              description: site.storeDomain,
+            }))}
+            onChange={(next) => {
+              setSourceSiteCode(next);
+              const others = siteOptions.filter((s) => s.code !== next);
+              setTargetSiteCodes(others[0]?.code ? [others[0].code] : []);
+              setCurrentPage(1);
+              void loadFiles(next);
+            }}
+            className="h-11 cursor-pointer rounded-lg border border-zinc-200 bg-white px-3 text-sm shadow-sm outline-none transition-all hover:border-zinc-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+            dropdownWidthClass="min-w-[200px]"
+          />
         </label>
 
-        <div className="grid gap-2 text-sm font-medium text-zinc-800">
+        <div className="grid gap-1 text-sm font-medium text-zinc-700">
           <span>目标站点（可多选）</span>
-          <div className="flex min-h-11 flex-wrap items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2">
+          <div className="flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50/50 px-2 py-1 shadow-sm transition-all">
             {selectableTargetSites.map((site) => (
               <button
                 key={site.code}
                 type="button"
                 onClick={() => toggleTargetSiteCode(site.code)}
-                className={`cursor-pointer rounded-md border px-2 py-1 text-xs transition ${
+                className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-all active:scale-95 ${
                   targetSiteCodes.includes(site.code)
-                    ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                    : "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-100"
+                    ? "bg-zinc-900 text-white shadow-sm ring-1 ring-zinc-900"
+                    : "bg-white text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
               >
                 {site.label}
@@ -336,155 +367,187 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
           </div>
         </div>
 
-        <div className="flex items-end">
+        <button
+          type="button"
+          onClick={() => void loadFiles(sourceSiteCode)}
+          disabled={isLoadingFiles}
+          className="h-11 cursor-pointer rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+        >
+          {isLoadingFiles ? (
+            <span className="flex items-center gap-1.5">
+              <svg className="h-4 w-4 animate-spin text-zinc-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              加载中…
+            </span>
+          ) : (
+            "刷新源站点列表"
+          )}
+        </button>
+      </div>
+
+      {/* 筛选：列表内 */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-3 shadow-sm transition-all">
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 shadow-sm transition-all hover:border-zinc-300">
+          <input
+            type="checkbox"
+            checked={onlyReady}
+            onChange={(event) => {
+              setOnlyReady(event.target.checked);
+              setCurrentPage(1);
+            }}
+            className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-indigo-600 shadow-sm transition-colors focus:ring-indigo-500 focus:ring-offset-0"
+          />
+          仅显示 READY 文件
+        </label>
+
+        <div className="flex min-w-[200px] flex-1 items-center gap-1">
+          <input
+            type="text"
+            value={nameKeyword}
+            onChange={(event) => {
+              setNameKeyword(event.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="按文件名或 Alt 筛选"
+            className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 text-sm shadow-sm outline-none transition-all hover:border-zinc-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+          />
+        </div>
+
+        <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 shadow-sm transition-all hover:border-zinc-300">
+          每页
+          <CustomSelect
+            value={String(pageSize)}
+            options={[
+              { label: "50", value: "50" },
+              { label: "100", value: "100" },
+              { label: "200", value: "200" },
+            ]}
+            onChange={(val) => {
+              setPageSize(Number(val));
+              setCurrentPage(1);
+            }}
+            className="h-8 cursor-pointer rounded-md border border-zinc-200 bg-white px-2.5 text-xs shadow-sm outline-none transition-all hover:border-zinc-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+          />
+          <span className="text-xs text-zinc-500">（Shopify 拉取上限 250）</span>
+        </label>
+      </div>
+
+      {/* 工具条 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 pb-4 pt-1">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-500">
+          <span>共 {items.length} 项</span>
+          <span>筛选后 <span className="font-medium text-zinc-700">{filteredItems.length}</span></span>
+          <span>已选 <span className="font-medium text-zinc-700">{selectedCount}</span></span>
+          <span>
+            第 <span className="font-medium text-zinc-700">{normalizedPage}</span>/{totalPages} 页
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => void loadFiles(sourceSiteCode)}
-            disabled={isLoadingFiles}
-            className="h-11 cursor-pointer rounded-lg border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+            onClick={toggleAllOnPage}
+            disabled={pagedItems.length < 1}
+            className="h-9 cursor-pointer rounded-lg border border-zinc-200 bg-white px-4 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
           >
-            {isLoadingFiles ? "正在拉取列表..." : "刷新源站点列表"}
+            {allSelectedOnPage ? "取消当前页全选" : "全选当前页"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            disabled={selectedCount < 1}
+            className="h-9 cursor-pointer rounded-lg border border-zinc-200 bg-white px-4 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+          >
+            清空选择
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSync}
+            disabled={isSyncing || selectedCount < 1 || targetSiteCodes.length < 1}
+            className="h-9 cursor-pointer rounded-lg bg-zinc-900 px-5 text-xs font-medium text-white shadow-sm transition-all hover:bg-zinc-800 hover:shadow active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+          >
+            {isSyncing ? (
+              <span className="flex items-center gap-1.5">
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                正在同步…
+              </span>
+            ) : selectedCount > 1 ? (
+              `批量同步 (${selectedCount})`
+            ) : selectedCount === 1 ? (
+              "同步选中项"
+            ) : (
+              "请选择后同步"
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleRetryFailed}
+            disabled={isSyncing || !syncSummary || syncSummary.failedCount < 1}
+            className="h-9 cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-4 text-xs font-medium text-amber-800 shadow-sm transition-all hover:bg-amber-100 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+          >
+            重试失败项
           </button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-        <div className="mb-4 grid gap-3 md:grid-cols-3">
-          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
-            <input
-              type="checkbox"
-              checked={onlyReady}
-              onChange={(event) => setOnlyReady(event.target.checked)}
-              className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            仅显示 READY 文件
-          </label>
-
-          <input
-            type="text"
-            value={nameKeyword}
-            onChange={(event) => setNameKeyword(event.target.value)}
-            placeholder="按文件名或 Alt 筛选"
-            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none ring-indigo-500 focus:ring-2 md:col-span-2"
-          />
-
-          <label className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
-            每页
-            <select
-              value={String(pageSize)}
-              onChange={(event) => setPageSize(Number(event.target.value))}
-              className="h-8 cursor-pointer rounded border border-zinc-300 bg-white px-2 text-xs outline-none ring-indigo-500 focus:ring-2"
+      {/* 列表 */}
+      <div className="flex flex-col gap-1.5">
+        {pagedItems.map((item) => {
+          const checked = selectedIdSet.has(item.id);
+          return (
+            <div
+              key={item.id}
+              onClick={() => toggleSingle(item.id)}
+              className={`group flex cursor-pointer items-stretch gap-4 rounded-xl border px-4 py-3 transition-all duration-200 ease-out hover:-translate-y-px hover:shadow-md ${
+                checked ? "border-indigo-400 bg-indigo-50/40 shadow-sm ring-1 ring-indigo-400/20" : "border-zinc-200 bg-white"
+              }`}
             >
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="200">200</option>
-            </select>
-            <span className="text-xs text-zinc-500">（Shopify 单次拉取上限 250）</span>
-          </label>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 text-sm text-zinc-700">
-            <span>共 {items.length} 项</span>
-            <span>筛选后 {filteredItems.length} 项</span>
-            <span>已选 {selectedCount} 项</span>
-            <span>
-              第 {normalizedPage}/{totalPages} 页
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleAllOnPage}
-              disabled={pagedItems.length < 1}
-              className="h-9 cursor-pointer rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-            >
-              {allSelectedOnPage ? "取消当前页全选" : "全选当前页"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSelectedIds([])}
-              disabled={selectedCount < 1}
-              className="h-9 cursor-pointer rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-            >
-              清空选择
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSync}
-              disabled={isSyncing || selectedCount < 1 || targetSiteCodes.length < 1}
-              className="h-9 cursor-pointer rounded-md bg-zinc-900 px-4 text-xs font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
-            >
-              {isSyncing
-                ? "正在同步..."
-                : selectedCount > 1
-                  ? `批量同步 (${selectedCount})`
-                  : selectedCount === 1
-                    ? "同步选中项"
-                    : "请选择后同步"}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleRetryFailed}
-              disabled={isSyncing || !syncSummary || syncSummary.failedCount < 1}
-              className="h-9 cursor-pointer rounded-md border border-amber-300 bg-amber-50 px-3 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400"
-            >
-              重试失败项
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-2">
-          {pagedItems.map((item) => {
-            const checked = selectedIdSet.has(item.id);
-            return (
-              <label
-                key={item.id}
-                className={`group flex cursor-pointer items-center gap-3 rounded-lg border bg-white p-3 transition ${
-                  checked ? "border-indigo-300 ring-2 ring-indigo-100" : "border-zinc-200 hover:border-zinc-300"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2 self-start">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleSingle(item.id)}
-                    className="mt-0.5 h-4 w-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="overflow-hidden rounded-md border border-zinc-200 bg-zinc-100">
-                  <img src={item.fileUrl} alt={item.alt || item.fileName} className="h-16 w-16 object-cover" />
-                </div>
-
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <div className="truncate text-sm font-medium text-zinc-900" title={item.fileName}>
-                      {item.fileName}
-                    </div>
-                    <span
-                      className={`rounded px-2 py-0.5 text-xs font-medium ${
-                        item.fileStatus === "READY"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}
-                    >
-                      {item.fileStatus}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                    <span>大小: {bytesToReadable(item.sizeBytes)}</span>
-                    <span>更新时间: {datetimeToReadable(item.updatedAt)}</span>
-                  </div>
-                </div>
+              <label className="flex shrink-0 cursor-pointer items-center" onClick={(e) => e.preventDefault()}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  readOnly
+                  className="pointer-events-none h-4 w-4 cursor-pointer rounded border-zinc-300 text-indigo-600 shadow-sm transition-colors focus:ring-indigo-500 focus:ring-offset-0"
+                />
               </label>
-            );
-          })}
-        </div>
+
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-zinc-200/80 bg-zinc-100 shadow-sm transition-transform group-hover:scale-105">
+                {/* eslint-disable-next-line @next/next/no-img-element -- 外部 Shopify CDN，动态域名不适合 next/image 静态配置 */}
+                <img src={item.fileUrl} alt={item.alt || item.fileName} className="h-full w-full object-cover transition-opacity duration-300" loading="lazy" />
+              </div>
+
+              <div className="min-w-0 flex-1 space-y-1 py-0.5">
+                <div className="flex items-center gap-2">
+                  <div className="truncate text-sm font-medium text-zinc-900" title={item.fileName}>
+                    {item.fileName}
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                      item.fileStatus === "READY"
+                        ? "bg-emerald-100/80 text-emerald-800"
+                        : "bg-amber-100/80 text-amber-800"
+                    }`}
+                  >
+                    {item.fileStatus}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+                  <span>大小: {bytesToReadable(item.sizeBytes)}</span>
+                  <span>更新时间: {datetimeToReadable(item.updatedAt)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
         {filteredItems.length < 1 && !isLoadingFiles ? (
           <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
@@ -498,98 +561,100 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
               type="button"
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               disabled={normalizedPage <= 1}
-              className="h-8 cursor-pointer rounded-md border border-zinc-300 bg-white px-3 text-xs text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+              className="h-7 cursor-pointer rounded-md border border-zinc-200 bg-white px-2.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
             >
               上一页
             </button>
-            <span className="text-xs text-zinc-600">
+            <span className="self-center text-xs text-zinc-600">
               第 {normalizedPage} / {totalPages} 页
             </span>
             <button
               type="button"
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={normalizedPage >= totalPages}
-              className="h-8 cursor-pointer rounded-md border border-zinc-300 bg-white px-3 text-xs text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+              className="h-7 cursor-pointer rounded-md border border-zinc-200 bg-white px-2.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
             >
               下一页
             </button>
           </div>
         ) : null}
-      </div>
 
       {errorMessage ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMessage}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-800 shadow-sm">{errorMessage}</div>
       ) : null}
 
       {syncSummary ? (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
-            共 {syncSummary.totalCount} 个文件，成功 {syncSummary.successCount}，失败 {syncSummary.failedCount}。
+        <div className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 shadow-sm transition-all">
+          <div className="text-[11px] font-medium text-zinc-700">
+            结果：共 {syncSummary.totalCount} 条 · 成功 <span className="text-emerald-600">{syncSummary.successCount}</span> · 失败 <span className="text-amber-600">{syncSummary.failedCount}</span>
           </div>
 
-          <div className="grid gap-3">
+          <div className="grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {syncSummary.results.map((result) => (
               <div
                 key={`${result.sourceFileId}-${result.targetSiteCode}`}
-                className={`rounded-lg border p-3 text-sm ${
+                className={`rounded-lg border px-2.5 py-2 text-[11px] leading-snug transition-all ${
                   result.success
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                    : "border-amber-200 bg-amber-50 text-amber-900"
+                    ? "border-emerald-200/80 bg-emerald-50/50 text-emerald-900"
+                    : "border-amber-200/80 bg-amber-50/50 text-amber-900"
                 }`}
               >
                 <div className="font-medium">{result.sourceFileName}</div>
-                <div>目标站点: {result.targetSiteCode.toUpperCase()}</div>
-                <div>状态: {result.targetFileStatus ?? (result.success ? "PROCESSING" : "FAILED")}</div>
-                {result.targetFileId ? <div>目标文件 ID: {result.targetFileId}</div> : null}
+                <div className="mt-0.5 text-zinc-600">
+                  → <span className="font-medium">{result.targetSiteCode.toUpperCase()}</span>
+                  <span className="ml-1.5 text-zinc-500">
+                    状态: {result.targetFileStatus ?? (result.success ? "PROCESSING" : "FAILED")}
+                  </span>
+                </div>
+                {result.targetFileId ? <div className="mt-0.5 text-zinc-500">ID: {result.targetFileId}</div> : null}
                 {result.targetFileUrl ? (
-                  <div className="truncate">
+                  <div className="mt-1 truncate">
                     CDN:{" "}
                     <a
                       href={result.targetFileUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="cursor-pointer underline decoration-dotted"
+                      className="cursor-pointer text-indigo-600 underline decoration-indigo-300 underline-offset-2 transition-colors hover:text-indigo-800"
                     >
                       {result.targetFileUrl}
                     </a>
                   </div>
                 ) : null}
-                {result.message ? <div>说明: {result.message}</div> : null}
+                {result.message ? <div className="mt-1 text-zinc-600">{result.message}</div> : null}
               </div>
             ))}
           </div>
         </div>
       ) : null}
 
-      {isConfirmOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
-            <div className="text-lg font-semibold text-zinc-900">确认同步</div>
-            <div className="mt-3 space-y-1 text-sm text-zinc-600">
-              <div>将同步 {selectedCount} 个文件</div>
-              <div>目标站点 {targetSiteCodes.length} 个</div>
-              <div className="text-xs text-zinc-500">该操作会在目标站点创建新文件记录。</div>
-            </div>
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsConfirmOpen(false)}
-                className="h-9 cursor-pointer rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 hover:bg-zinc-100"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleConfirmSync()}
-                className="h-9 cursor-pointer rounded-md bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-700"
-              >
-                确认同步
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>确认同步</DialogTitle>
+            <DialogDescription>
+              将同步 <b className="text-foreground">{selectedCount}</b> 个文件到{" "}
+              <b className="text-foreground">{targetSiteCodes.length}</b> 个目标站。
+              <span className="mt-1 block text-[11px] text-muted-foreground">该操作会在目标站点创建新文件记录。</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setIsConfirmOpen(false)}
+              className="h-8 cursor-pointer rounded-md border border-border bg-background px-3.5 text-xs font-medium text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleConfirmSync()}
+              className="h-8 cursor-pointer rounded-md bg-primary px-4 text-xs font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95"
+            >
+              确认同步
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
