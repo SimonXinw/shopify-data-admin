@@ -7,6 +7,7 @@
 - **Next.js** `16.x`（App Router）、**React** `19.x`、**TypeScript** `5.x`
 - **Tailwind CSS** `4.x`
 - UI 基础组件采用 **shadcn/ui 风格源码入库**（Radix UI primitives + Tailwind CSS），主题偏 Shopify Polaris 灰色调。
+- 页面媒体提取使用 `cheerio` 在服务端解析 HTML；批量 ZIP 由客户端进入页面后从 CDN 预加载 `JSZip`，不把图片/视频文件流经本服务端。
 - 服务端逻辑使用 `server-only` 模块；所有调用 Shopify 的 API Route 显式声明 `runtime = "nodejs"`
 - 包管理器：**pnpm**（`package.json` 的 `packageManager` 字段固定版本；有 `pnpm-lock.yaml`，请勿用 npm / yarn 安装。建议先执行 `corepack enable`，再 `pnpm install`。）
 
@@ -38,12 +39,15 @@ pnpm dev
 | --- | --- | --- |
 | `/` | 工具控制台首页 | 列出当前已上线的工具卡片入口，作为未来更多数据工具的导航中心。 |
 | `/tools/image-upload` | 批量上传图片到 Shopify | 选择站点 → 多选本地图片 → 调用后端走 `stagedUploadsCreate` + `fileCreate` 写入对应站点 Shopify 后台 `Content > Files`，返回每个文件的上传结果与 CDN 链接。 |
+| `/tools/image-download` | 页面媒体提取 | 输入页面 URL，服务端以浏览器请求头抓取 SSR HTML（如 Shopify Liquid 渲染页），解析图片与视频链接；支持多选复制、单张 / 批量 ZIP 下载，亦可手动添加 URL 或从 JSON 提取 `shopify://shop_images/`。 |
+| `/tools/file-sync` | 跨站点图片同步 | 读取源站点 Shopify Files 列表，多选后同步到其他站点，并查看每项同步结果与目标 CDN。 |
 | `/tools/product-sync` | 跨站点产品同步 | 选择源站点拉取产品列表（支持 Shopify 搜索语法与本地筛选），多选后同步到一个或多个目标站点；目标站若已占用 handle 会自动追加 `-copy` / `-copy-2` 等后缀。需至少 2 个站点且 Admin Token 含 `read_products`、`write_products`。 |
 
 对应的后端 HTTP 接口：
 
 | 方法 | 路径 | 入参 | 说明 |
 | --- | --- | --- | --- |
+| `POST` | `/api/tools/page-media/extract` | JSON：`url`（http/https 页面地址） | 以当前请求的浏览器头抓取目标页 HTML 并解析媒体 URL 列表；**不代理下载文件**，图片/视频由用户浏览器直连 CDN 下载。 |
 | `POST` | `/api/tools/shopify/files/upload` | `multipart/form-data`：`siteCode`、`files[]`，可选 `altPrefix` | 批量将本地文件上传到指定站点的 Shopify Files。 |
 | `POST` | `/api/tools/shopify/files/list` | JSON：`siteCode`，可选 `first`（默认 250，服务端会裁剪到 1–250） | 列出某站点的图片类型文件。 |
 | `POST` | `/api/tools/shopify/products/list` | JSON：`siteCode`，可选 `first`（默认 100，上限 100）、`query`（Shopify `products` 查询语法，可省略） | 列出某站点最近更新的产品摘要（标题、handle、状态、主图、变体数量等）。 |
@@ -61,13 +65,18 @@ shopify-data-admin/
 │  │  ├─ image-upload/     # 批量上传图片页面
 │  │  │  ├─ page.tsx
 │  │  │  └─ _components/   # 仅本页面使用的客户端组件（带下划线，不参与路由）
+│  │  ├─ image-download/   # 页面媒体提取（抓取页面图片 / 视频 URL）
+│  │  │  ├─ page.tsx
+│  │  │  └─ _components/
 │  │  ├─ file-sync/        # 跨站点图片同步页面
 │  │  │  ├─ page.tsx
 │  │  │  └─ _components/
 │  │  └─ product-sync/    # 跨站点产品同步页面
 │  │     ├─ page.tsx
 │  │     └─ _components/
-│  └─ api/tools/shopify/
+│  └─ api/tools/
+│     ├─ page-media/extract/route.ts  # 抓取页面 HTML 并提取媒体 URL
+│     └─ shopify/
 │     ├─ files/
 │     │  ├─ upload/route.ts   # 批量上传接口
 │     │  ├─ list/route.ts     # 文件列表接口
