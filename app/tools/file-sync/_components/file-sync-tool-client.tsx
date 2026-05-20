@@ -5,6 +5,8 @@ import "../file-sync-scroll.css";
 import { memo, useCallback, useEffect, useMemo, useState, startTransition } from "react";
 import { CircleHelp } from "lucide-react";
 import { toast } from "sonner";
+import { AddCustomSiteDialog } from "@/app/tools/_components/add-custom-site-dialog";
+import { useCustomSiteOptions } from "@/app/tools/_components/use-custom-site-options";
 import { CustomSelect } from "@/components/data-entry/custom-select";
 import {
   Dialog,
@@ -14,12 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-type SiteOption = {
-  code: string;
-  label: string;
-  storeDomain: string;
-};
+import type { RuntimeSiteOption } from "@/lib/config/runtime-sites";
 
 type SiteImageItem = {
   id: string;
@@ -33,7 +30,7 @@ type SiteImageItem = {
 };
 
 type ListApiResponse = {
-  siteCode: string;
+  storeDomain: string;
   first: number;
   count: number;
   items: SiteImageItem[];
@@ -43,7 +40,7 @@ type ListApiResponse = {
 type SyncResultItem = {
   sourceFileId: string;
   sourceFileName: string;
-  targetSiteCode: string;
+  targetStoreDomain: string;
   success: boolean;
   targetFileId?: string;
   targetFileStatus?: string;
@@ -67,7 +64,7 @@ type SuccessfulSyncHistoryItem = {
   sourceFileName: string;
   sourceFileUrl: string;
   targetFileUrl: string;
-  targetSiteCode: string;
+  targetStoreDomain: string;
   targetSiteLabel: string;
   targetFileStatus?: string;
   sizeBytes?: number;
@@ -103,7 +100,7 @@ const datetimeToReadable = (iso: string): string => {
 
 const buildSyncSuccessToastMessage = (
   results: SyncResultItem[],
-  siteOptions: SiteOption[],
+  siteOptions: RuntimeSiteOption[],
 ): string | null => {
   const successfulResults = results.filter((result) => result.success);
   if (successfulResults.length < 1) {
@@ -111,8 +108,8 @@ const buildSyncSuccessToastMessage = (
   }
 
   const syncedFileCount = new Set(successfulResults.map((result) => result.sourceFileId)).size;
-  const syncedSiteLabels = Array.from(new Set(successfulResults.map((result) => result.targetSiteCode)))
-    .map((code) => siteOptions.find((site) => site.code === code)?.label ?? code.toUpperCase())
+  const syncedSiteLabels = Array.from(new Set(successfulResults.map((result) => result.targetStoreDomain)))
+    .map((storeDomain) => siteOptions.find((site) => site.storeDomain === storeDomain)?.label ?? storeDomain)
     .join("、");
 
   return `已同步 ${syncedFileCount} 张图片到 ${syncedSiteLabels} 成功`;
@@ -126,10 +123,10 @@ const buildUrlMapping = (oldUrl: string, newUrl: string) => ({
 const buildSuccessfulSyncHistoryItems = (
   results: SyncResultItem[],
   sourceItems: SiteImageItem[],
-  siteOptions: SiteOption[],
+  siteOptions: RuntimeSiteOption[],
 ): SuccessfulSyncHistoryItem[] => {
   const sourceItemMap = new Map(sourceItems.map((item) => [item.id, item]));
-  const siteOptionMap = new Map(siteOptions.map((site) => [site.code, site]));
+  const siteOptionMap = new Map(siteOptions.map((site) => [site.storeDomain, site]));
   const syncedAt = new Date().toISOString();
 
   return results
@@ -138,15 +135,15 @@ const buildSuccessfulSyncHistoryItems = (
       const sourceItem = sourceItemMap.get(result.sourceFileId);
       const sourceFileUrl = sourceItem?.fileUrl ?? "";
       const targetFileUrl = result.targetFileUrl ?? sourceFileUrl;
-      const targetSiteLabel = siteOptionMap.get(result.targetSiteCode)?.label ?? result.targetSiteCode.toUpperCase();
+      const targetSiteLabel = siteOptionMap.get(result.targetStoreDomain)?.label ?? result.targetStoreDomain;
 
       return {
-        id: `${result.sourceFileId}-${result.targetSiteCode}-${result.targetFileId ?? syncedAt}`,
+        id: `${result.sourceFileId}-${result.targetStoreDomain}-${result.targetFileId ?? syncedAt}`,
         sourceFileId: result.sourceFileId,
         sourceFileName: result.sourceFileName,
         sourceFileUrl,
         targetFileUrl,
-        targetSiteCode: result.targetSiteCode,
+        targetStoreDomain: result.targetStoreDomain,
         targetSiteLabel,
         targetFileStatus: result.targetFileStatus,
         sizeBytes: sourceItem?.sizeBytes,
@@ -205,13 +202,14 @@ const FileListRow = memo(function FileListRow({ item, checked, onToggle }: FileL
   );
 });
 
-export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] }) {
+export function FileSyncToolClient({ siteOptions: initialSiteOptions }: { siteOptions: RuntimeSiteOption[] }) {
+  const { isReady, siteOptions, customSiteConfigMap, addCustomSite } = useCustomSiteOptions(initialSiteOptions);
   const FETCH_LIMIT = 250;
-  const [sourceSiteCode, setSourceSiteCode] = useState(siteOptions[0]?.code ?? "");
-  const [targetSiteCodes, setTargetSiteCodes] = useState<string[]>(() => {
-    const src = siteOptions[0]?.code;
-    const other = siteOptions.find((s) => s.code !== src);
-    return other ? [other.code] : [];
+  const [sourceStoreDomain, setSourceStoreDomain] = useState(siteOptions[0]?.storeDomain ?? "");
+  const [targetStoreDomains, setTargetStoreDomains] = useState<string[]>(() => {
+    const src = siteOptions[0]?.storeDomain;
+    const other = siteOptions.find((s) => s.storeDomain !== src);
+    return other ? [other.storeDomain] : [];
   });
   const [items, setItems] = useState<SiteImageItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -228,8 +226,8 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
   const [syncHistoryItems, setSyncHistoryItems] = useState<SuccessfulSyncHistoryItem[]>([]);
 
   const selectableTargetSites = useMemo(
-    () => siteOptions.filter((site) => site.code !== sourceSiteCode),
-    [siteOptions, sourceSiteCode],
+    () => siteOptions.filter((site) => site.storeDomain !== sourceStoreDomain),
+    [siteOptions, sourceStoreDomain],
   );
 
   const filteredItems = useMemo(() => {
@@ -300,8 +298,8 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
     await handleCopyText(JSON.stringify(buildUrlMapping(item.sourceFileUrl, item.targetFileUrl), null, 2), "已复制 URL 映射 JSON");
   };
 
-  const loadFiles = async (siteCode: string) => {
-    if (!siteCode) {
+  const loadFiles = async (storeDomain: string) => {
+    if (!storeDomain) {
       setItems([]);
       setSelectedIds([]);
       return;
@@ -318,14 +316,15 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          siteCode,
+          storeDomain,
           first: FETCH_LIMIT,
+          customSiteConfigs: customSiteConfigMap,
         }),
       });
 
       const body = (await response.json()) as ListApiResponse;
       if (!response.ok) {
-        setErrorMessage(body.message ?? "获取站点文件失败。");
+        setErrorMessage(body.message ?? "获取店铺文件失败。");
         setItems([]);
         setSelectedIds([]);
         return;
@@ -335,7 +334,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
       setSelectedIds([]);
       setCurrentPage(1);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "获取站点文件失败。");
+      setErrorMessage(error instanceof Error ? error.message : "获取店铺文件失败。");
       setItems([]);
       setSelectedIds([]);
     } finally {
@@ -344,16 +343,21 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
   };
 
   useEffect(() => {
-    const code = siteOptions[0]?.code ?? "";
-    if (!code) {
+    if (!isReady || sourceStoreDomain) {
       return;
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 挂载时预拉取图片列表
-    void loadFiles(code);
-    // siteOptions 来自服务端 page，首屏稳定
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const storeDomain = siteOptions[0]?.storeDomain ?? "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 初始化默认源店铺
+    setSourceStoreDomain(storeDomain);
+    const others = siteOptions.filter((s) => s.storeDomain !== storeDomain);
+    setTargetStoreDomains(others[0]?.storeDomain ? [others[0].storeDomain] : []);
+
+    if (storeDomain) {
+      void loadFiles(storeDomain);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在店铺列表就绪且未选中店铺时初始化
+  }, [isReady, sourceStoreDomain, siteOptions]);
 
   const handleTabChange = useCallback((tab: ActiveTab) => {
     startTransition(() => {
@@ -377,8 +381,8 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
   };
 
   const doSync = async (fileIds: string[]) => {
-    if (!sourceSiteCode || targetSiteCodes.length < 1) {
-      setErrorMessage("请选择源站点和至少一个目标站点。");
+    if (!sourceStoreDomain || targetStoreDomains.length < 1) {
+      setErrorMessage("请选择源店铺和至少一个目标店铺。");
       return;
     }
 
@@ -398,9 +402,10 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sourceSiteCode,
-          targetSiteCodes,
+          sourceStoreDomain,
+          targetStoreDomains,
           fileIds,
+          customSiteConfigs: customSiteConfigMap,
         }),
       });
 
@@ -435,8 +440,8 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
       return;
     }
 
-    if (targetSiteCodes.length < 1) {
-      setErrorMessage("请先选择至少一个目标站点。");
+    if (targetStoreDomains.length < 1) {
+      setErrorMessage("请先选择至少一个目标店铺。");
       return;
     }
 
@@ -463,13 +468,13 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
     await doSync(selectedIds);
   };
 
-  const toggleTargetSiteCode = (siteCode: string) => {
-    setTargetSiteCodes((prev) => {
-      if (prev.includes(siteCode)) {
-        return prev.filter((code) => code !== siteCode);
+  const toggleTargetStoreDomain = (storeDomain: string) => {
+    setTargetStoreDomains((prev) => {
+      if (prev.includes(storeDomain)) {
+        return prev.filter((domain) => domain !== storeDomain);
       }
 
-      return [...prev, siteCode];
+      return [...prev, storeDomain];
     });
   };
 
@@ -477,7 +482,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
     <div className="mx-auto flex min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-4 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm">
       <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-start md:gap-4">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">跨站点图片同步</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">跨店铺图片同步</h1>
           <div className="group relative">
             <button
               type="button"
@@ -488,7 +493,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
             </button>
             <div className="pointer-events-none absolute left-0 top-7 z-20 hidden w-[360px] rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs leading-relaxed text-zinc-600 shadow-lg group-hover:block">
               <div className="absolute -top-1 left-2 h-2 w-2 rotate-45 border-l border-t border-zinc-200 bg-white" />
-              从源站点读取 Shopify Files 图片列表，按需选择后批量同步到目标站点，并查看同步结果与目标 CDN。
+              从源店铺读取 Shopify Files 图片列表，按需选择后批量同步到目标店铺，并查看同步结果与目标 CDN。
             </div>
           </div>
         </div>
@@ -531,18 +536,18 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
 
       <div className="grid shrink-0 gap-2 rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end lg:grid-cols-[1fr_2fr_auto]">
         <label className="grid gap-1.5 text-sm font-medium text-zinc-700">
-          源站点
+          源店铺
           <CustomSelect
-            value={sourceSiteCode}
+            value={sourceStoreDomain}
             options={siteOptions.map((site) => ({
               label: site.label,
-              value: site.code,
+              value: site.storeDomain,
               description: site.storeDomain,
             }))}
             onChange={(next) => {
-              setSourceSiteCode(next);
-              const others = siteOptions.filter((s) => s.code !== next);
-              setTargetSiteCodes(others[0]?.code ? [others[0].code] : []);
+              setSourceStoreDomain(next);
+              const others = siteOptions.filter((s) => s.storeDomain !== next);
+              setTargetStoreDomains(others[0]?.storeDomain ? [others[0].storeDomain] : []);
               setCurrentPage(1);
               void loadFiles(next);
             }}
@@ -552,15 +557,15 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
         </label>
 
         <div className="grid gap-1 text-sm font-medium text-zinc-700">
-          <span>目标站点（可多选）</span>
+          <span>目标店铺（可多选）</span>
           <div className="flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50/50 px-2 py-1 shadow-sm transition-all">
             {selectableTargetSites.map((site) => (
               <button
-                key={site.code}
+                key={site.storeDomain}
                 type="button"
-                onClick={() => toggleTargetSiteCode(site.code)}
+                onClick={() => toggleTargetStoreDomain(site.storeDomain)}
                 className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-all active:scale-95 ${
-                  targetSiteCodes.includes(site.code)
+                  targetStoreDomains.includes(site.storeDomain)
                     ? "bg-zinc-900 text-white shadow-sm ring-1 ring-zinc-900"
                     : "bg-white text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
@@ -571,24 +576,27 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void loadFiles(sourceSiteCode)}
-          disabled={isLoadingFiles}
-          className="h-11 cursor-pointer rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
-        >
-          {isLoadingFiles ? (
-            <span className="flex items-center gap-1.5">
-              <svg className="h-4 w-4 animate-spin text-zinc-500" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              加载中…
-            </span>
-          ) : (
-            "刷新源站点列表"
-          )}
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <AddCustomSiteDialog onAdd={addCustomSite} />
+          <button
+            type="button"
+            onClick={() => void loadFiles(sourceStoreDomain)}
+            disabled={isLoadingFiles}
+            className="h-11 cursor-pointer rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+          >
+            {isLoadingFiles ? (
+              <span className="flex items-center gap-1.5">
+                <svg className="h-4 w-4 animate-spin text-zinc-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                加载中…
+              </span>
+            ) : (
+              "刷新源店铺列表"
+            )}
+          </button>
+        </div>
       </div>
 
       <div className={activeTab === "files" ? "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pt-1" : "hidden"} aria-hidden={activeTab !== "files"}>
@@ -675,7 +683,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
               <button
                 type="button"
                 onClick={handleSync}
-                disabled={isSyncing || selectedCount < 1 || targetSiteCodes.length < 1}
+                disabled={isSyncing || selectedCount < 1 || targetStoreDomains.length < 1}
                 className="h-8 cursor-pointer rounded-md bg-indigo-600 px-3 text-xs font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
               >
                 {isSyncing ? (
@@ -876,7 +884,7 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
           <div className="file_sync_scroll grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {syncSummary.results.map((result) => (
               <div
-                key={`${result.sourceFileId}-${result.targetSiteCode}`}
+                key={`${result.sourceFileId}-${result.targetStoreDomain}`}
                 className={`rounded-lg border px-2.5 py-2 text-[11px] leading-snug transition-all ${
                   result.success
                     ? "border-emerald-200/80 bg-emerald-50/50 text-emerald-900"
@@ -885,7 +893,11 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
               >
                 <div className="font-medium">{result.sourceFileName}</div>
                 <div className="mt-0.5 text-zinc-600">
-                  → <span className="font-medium">{result.targetSiteCode.toUpperCase()}</span>
+                  →{" "}
+                  <span className="font-medium">
+                    {siteOptions.find((item) => item.storeDomain === result.targetStoreDomain)?.label ??
+                      result.targetStoreDomain}
+                  </span>
                   <span className="ml-1.5 text-zinc-500">
                     状态: {result.targetFileStatus ?? (result.success ? "PROCESSING" : "FAILED")}
                   </span>
@@ -917,8 +929,8 @@ export function FileSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] 
             <DialogTitle>确认同步</DialogTitle>
             <DialogDescription>
               将同步 <b className="text-foreground">{selectedCount}</b> 个文件到{" "}
-              <b className="text-foreground">{targetSiteCodes.length}</b> 个目标站。
-              <span className="mt-1 block text-[11px] text-muted-foreground">该操作会在目标站点创建新文件记录。</span>
+              <b className="text-foreground">{targetStoreDomains.length}</b> 个目标店铺。
+              <span className="mt-1 block text-[11px] text-muted-foreground">该操作会在目标店铺创建新文件记录。</span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

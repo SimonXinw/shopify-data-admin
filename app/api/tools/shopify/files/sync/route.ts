@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { buildRuntimeSiteConfigMap } from "@/lib/config/runtime-sites";
 import { syncImagesToSite } from "@/lib/shopify/file-sync";
 
 export const runtime = "nodejs";
@@ -7,45 +8,38 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
-      sourceSiteCode?: string;
-      targetSiteCode?: string;
-      targetSiteCodes?: string[];
+      sourceStoreDomain?: string;
+      targetStoreDomains?: string[];
       fileIds?: string[];
+      customSiteConfigs?: unknown;
     };
 
-    const sourceSiteCode = String(body.sourceSiteCode ?? "").trim().toLowerCase();
-    const targetSiteCodes = Array.isArray(body.targetSiteCodes)
-      ? body.targetSiteCodes
+    const sourceStoreDomain = String(body.sourceStoreDomain ?? "").trim().toLowerCase();
+    const targetStoreDomains = Array.isArray(body.targetStoreDomains)
+      ? body.targetStoreDomains
           .map((code) => String(code).trim().toLowerCase())
           .filter((code) => code.length > 0)
       : [];
-    const fallbackTargetSiteCode = String(body.targetSiteCode ?? "").trim().toLowerCase();
-    const normalizedTargetSiteCodes = Array.from(
-      new Set(
-        targetSiteCodes.length > 0
-          ? targetSiteCodes
-          : fallbackTargetSiteCode
-            ? [fallbackTargetSiteCode]
-            : [],
-      ),
-    );
+    const normalizedTargetStoreDomains = Array.from(new Set(targetStoreDomains));
     const fileIds = Array.isArray(body.fileIds)
       ? body.fileIds
           .map((id) => String(id).trim())
           .filter((id) => id.length > 0)
       : [];
+    const customSiteConfigs = buildRuntimeSiteConfigMap(body.customSiteConfigs);
 
-    if (!sourceSiteCode || normalizedTargetSiteCodes.length < 1) {
+    if (!sourceStoreDomain || normalizedTargetStoreDomains.length < 1) {
       return NextResponse.json(
-        { message: "缺少 sourceSiteCode 或 targetSiteCodes 参数。" },
+        { message: "缺少 sourceStoreDomain 或 targetStoreDomains 参数。" },
         { status: 400 },
       );
     }
 
     const results = await syncImagesToSite({
-      sourceSiteCode,
-      targetSiteCodes: normalizedTargetSiteCodes,
+      sourceSiteCode: sourceStoreDomain,
+      targetSiteCodes: normalizedTargetStoreDomains,
       fileIds,
+      customSiteConfigs,
     });
 
     const successCount = results.filter((item) => item.success).length;

@@ -4,8 +4,8 @@ import { listAvailableSiteOptions } from "@/lib/config/sites";
 import { FileSyncToolClient } from "@/app/tools/file-sync/_components/file-sync-tool-client";
 
 export const metadata = {
-  title: "跨站点图片同步工具",
-  description: "读取源站点图片文件，并批量同步到目标站点。",
+  title: "跨店铺图片同步工具",
+  description: "读取源店铺图片文件，并批量同步到目标店铺。",
 };
 
 export default function FileSyncToolPage() {
@@ -34,14 +34,7 @@ export default function FileSyncToolPage() {
         </Link>
       </div>
 
-      {siteOptions.length > 1 ? (
-        <FileSyncToolClient siteOptions={siteOptions} />
-      ) : (
-        <div className="mx-auto w-full max-w-3xl rounded-xl border border-amber-300 bg-amber-50 p-6 text-amber-900">
-          跨站点同步至少需要两个已配置站点。请先在 `.env.local` 中配置至少两组
-          `*_SHOPIFY_STORE_DOMAIN` 与 `*_SHOPIFY_ADMIN_ACCESS_TOKEN`。
-        </div>
-      )}
+      <FileSyncToolClient siteOptions={siteOptions} />
     </main>
   );
 }

@@ -1,14 +1,10 @@
 import "server-only";
 
 import { SHOPIFY_ENDPOINT_PATHS } from "@/lib/constants/shopify";
-import { getSiteConfigOrThrow, type SiteCode } from "@/lib/config/sites";
+import { getSiteConfigOrThrow } from "@/lib/config/sites";
 
-function toEnvPrefix(code: SiteCode): string {
-  return code.toUpperCase();
-}
-
-function readEnv(prefix: string, suffix: string): string {
-  return (process.env[`${prefix}_${suffix}`] ?? "").trim();
+function readEnvByName(envName: string): string {
+  return (process.env[envName] ?? "").trim();
 }
 
 export type ShopifyStorefrontRequestContext = {
@@ -20,14 +16,13 @@ export type ShopifyStorefrontRequestContext = {
  * 读取站点 Storefront API 凭证（依赖已配置的 SHOPIFY_STORE_DOMAIN 与 SHOPIFY_STOREFRONT_ACCESS_TOKEN）。
  */
 export function getShopifyStorefrontRequestContextOrThrow(
-  siteCodeRaw: string
+  storeDomainRaw: string
 ): ShopifyStorefrontRequestContext {
-  const siteConfig = getSiteConfigOrThrow(siteCodeRaw);
-  const prefix = toEnvPrefix(siteConfig.code);
-  const accessToken = readEnv(prefix, "SHOPIFY_STOREFRONT_ACCESS_TOKEN");
+  const siteConfig = getSiteConfigOrThrow(storeDomainRaw);
+  const accessToken = readEnvByName(siteConfig.storefrontAccessTokenEnvName);
 
   if (!accessToken) {
-    throw new Error(`站点 ${siteConfig.code} 缺少 SHOPIFY_STOREFRONT_ACCESS_TOKEN`);
+    throw new Error(`店铺 ${siteConfig.label} 缺少环境变量 ${siteConfig.storefrontAccessTokenEnvName}`);
   }
 
   const endpoint = `https://${siteConfig.storeDomain}${SHOPIFY_ENDPOINT_PATHS.storefrontGraphql}`;

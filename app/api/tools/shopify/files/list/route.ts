@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server";
 
+import { buildRuntimeSiteConfigMap } from "@/lib/config/runtime-sites";
 import { listSiteImages } from "@/lib/shopify/file-sync";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { siteCode?: string; first?: number };
-    const siteCode = String(body.siteCode ?? "").trim().toLowerCase();
+    const body = (await request.json()) as { storeDomain?: string; first?: number; customSiteConfigs?: unknown };
+    const storeDomain = String(body.storeDomain ?? "").trim().toLowerCase();
     const firstRaw = Number(body.first ?? 250);
     const first = Number.isFinite(firstRaw) ? firstRaw : 250;
+    const customSiteConfigs = buildRuntimeSiteConfigMap(body.customSiteConfigs);
 
-    if (!siteCode) {
-      return NextResponse.json({ message: "缺少 siteCode 参数。" }, { status: 400 });
+    if (!storeDomain) {
+      return NextResponse.json({ message: "缺少 storeDomain 参数。" }, { status: 400 });
     }
 
-    const items = await listSiteImages(siteCode, first);
+    const items = await listSiteImages(storeDomain, first, { customSiteConfigs });
 
     return NextResponse.json({
-      siteCode,
+      storeDomain,
       first: Math.min(250, Math.max(1, Math.floor(first))),
       count: items.length,
       items,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { type RuntimeSiteConfigMap } from "@/lib/config/runtime-sites";
 import {
   SHOPIFY_PRODUCT_LIST_LIMIT,
   SHOPIFY_PRODUCT_SYNC_BATCH,
@@ -25,7 +26,7 @@ export type ProductSyncResultItem = {
   sourceProductId: string;
   sourceTitle: string;
   sourceHandle: string;
-  targetSiteCode: string;
+  targetStoreDomain: string;
   success: boolean;
   targetProductId?: string;
   targetHandle?: string;
@@ -335,11 +336,16 @@ function normalizeTags(tags: string[] | string | null | undefined): string[] {
     .filter(Boolean);
 }
 
-async function productExistsByHandle(siteCode: string, handle: string): Promise<boolean> {
+async function productExistsByHandle(
+  siteCode: string,
+  handle: string,
+  customSiteConfigs?: RuntimeSiteConfigMap,
+): Promise<boolean> {
   const data = await shopifyAdminRequest<ProductByHandleData>({
-    siteCode,
+    storeDomain: siteCode,
     query: PRODUCT_BY_HANDLE_QUERY,
     variables: { handle },
+    customSiteConfigs,
   });
 
   return Boolean(data.productByHandle?.id);
@@ -348,20 +354,24 @@ async function productExistsByHandle(siteCode: string, handle: string): Promise<
 /**
  * 目标站已占用 handle 时：依次尝试 `base-copy`、`base-copy-2`、…（与需求「-copy + 序号」一致）。
  */
-export async function resolveUniqueProductHandle(siteCode: string, baseHandle: string): Promise<string> {
+export async function resolveUniqueProductHandle(
+  siteCode: string,
+  baseHandle: string,
+  customSiteConfigs?: RuntimeSiteConfigMap,
+): Promise<string> {
   const normalized = baseHandle.trim().toLowerCase();
   if (!normalized) {
     throw new Error("源产品 handle 为空，无法同步。");
   }
 
-  if (!(await productExistsByHandle(siteCode, normalized))) {
+  if (!(await productExistsByHandle(siteCode, normalized, customSiteConfigs))) {
     return normalized;
   }
 
   let suffix = 1;
   let candidate = `${normalized}-copy`;
 
-  while (await productExistsByHandle(siteCode, candidate)) {
+  while (await productExistsByHandle(siteCode, candidate, customSiteConfigs)) {
     suffix += 1;
     candidate = `${normalized}-copy-${suffix}`;
   }
@@ -494,7 +504,7 @@ function chunkArray<T>(items: T[], size: number): T[][] {
 
 export async function listSiteProducts(
   siteCode: string,
-  options: { first?: number; searchQuery?: string } = {},
+  options: { first?: number; searchQuery?: string; customSiteConfigs?: RuntimeSiteConfigMap } = {},
 ): Promise<SiteProductListItem[]> {
   const firstRaw = options.first ?? SHOPIFY_PRODUCT_LIST_LIMIT;
   const first = Math.min(SHOPIFY_PRODUCT_LIST_LIMIT, Math.max(1, Math.floor(firstRaw)));
@@ -508,9 +518,10 @@ export async function listSiteProducts(
   }
 
   const data = await shopifyAdminRequest<ProductsListData>({
-    siteCode,
+    storeDomain: siteCode,
     query: PRODUCTS_LIST_QUERY,
     variables,
+    customSiteConfigs: options.customSiteConfigs,
   });
 
   return data.products.edges.map(({ node }) => {
@@ -534,11 +545,16 @@ export async function listSiteProducts(
   });
 }
 
-async function fetchSourceProduct(siteCode: string, productId: string): Promise<SourceProductNode> {
+async function fetchSourceProduct(
+  siteCode: string,
+  productId: string,
+  customSiteConfigs?: RuntimeSiteConfigMap,
+): Promise<SourceProductNode> {
   const data = await shopifyAdminRequest<ProductForSyncData>({
-    siteCode,
+    storeDomain: siteCode,
     query: PRODUCT_FOR_SYNC_QUERY,
     variables: { id: productId },
+    customSiteConfigs,
   });
 
   if (!data.product) {
@@ -555,8 +571,9 @@ async function createProductOnTarget(params: {
   productOptions?: Array<{ name: string; values: Array<{ name: string }> }>;
   metafields: ReturnType<typeof mapMetafieldsToCreateInput>;
   media: ReturnType<typeof buildCreateMediaInputs>;
+  customSiteConfigs?: RuntimeSiteConfigMap;
 }): Promise<{ productId: string; firstVariantId: string | null; userError?: string }> {
-  const { targetSiteCode, product, handle, productOptions, metafields, media } = params;
+  const { targetSiteCode, product, handle, productOptions, metafields, media, customSiteConfigs } = params;
 
   const productInput: Record<string, unknown> = {
     title: product.title,
@@ -583,9 +600,10 @@ async function createProductOnTarget(params: {
 
   const useMedia = media.length > 0;
   const data = await shopifyAdminRequest<ProductCreateData>({
-    siteCode: targetSiteCode,
+    storeDomain: targetSiteCode,
     query: useMedia ? PRODUCT_CREATE_WITH_MEDIA_MUTATION : PRODUCT_CREATE_MUTATION,
     variables: useMedia ? { product: productInput, media } : { product: productInput },
+    customSiteConfigs,
   });
 
   const payload = data.productCreate;
@@ -652,8 +670,9 @@ async function applyVariantsOnTarget(params: {
   variants: SourceVariantNode[];
   firstVariantId: string | null;
   defaultSingle: boolean;
+  customSiteConfigs?: RuntimeSiteConfigMap;
 }): Promise<string | undefined> {
-  const { targetSiteCode, productId, variants, firstVariantId, defaultSingle } = params;
+  const { targetSiteCode, productId, variants, firstVariantId, defaultSingle, customSiteConfigs } = params;
 
   if (variants.length < 1) {
     return "源产品没有变体，已跳过变体写入。";
@@ -686,12 +705,13 @@ async function applyVariantsOnTarget(params: {
     }
 
     const data = await shopifyAdminRequest<ProductVariantsBulkUpdateData>({
-      siteCode: targetSiteCode,
+      storeDomain: targetSiteCode,
       query: PRODUCT_VARIANTS_BULK_UPDATE_MUTATION,
       variables: {
         productId,
         variants: [updateRow],
       },
+      customSiteConfigs,
     });
 
     if (data.productVariantsBulkUpdate.userErrors.length > 0) {
@@ -720,9 +740,10 @@ async function applyVariantsOnTarget(params: {
     }
 
     const data = await shopifyAdminRequest<ProductVariantsBulkCreateData>({
-      siteCode: targetSiteCode,
+      storeDomain: targetSiteCode,
       query: PRODUCT_VARIANTS_BULK_CREATE_MUTATION,
       variables,
+      customSiteConfigs,
     });
 
     if (data.productVariantsBulkCreate.userErrors.length > 0) {
@@ -739,10 +760,12 @@ export async function syncProductsToSites({
   sourceSiteCode,
   targetSiteCodes,
   productIds,
+  customSiteConfigs,
 }: {
   sourceSiteCode: string;
   targetSiteCodes: string[];
   productIds: string[];
+  customSiteConfigs?: RuntimeSiteConfigMap;
 }): Promise<ProductSyncResultItem[]> {
   const normalizedSource = sourceSiteCode.trim().toLowerCase();
   const normalizedTargets = Array.from(
@@ -772,14 +795,14 @@ export async function syncProductsToSites({
     let sourceProduct: SourceProductNode | null = null;
 
     try {
-      sourceProduct = await fetchSourceProduct(normalizedSource, productId);
+      sourceProduct = await fetchSourceProduct(normalizedSource, productId, customSiteConfigs);
     } catch (error) {
       for (const targetSiteCode of normalizedTargets) {
         results.push({
           sourceProductId: productId,
           sourceTitle: productId,
           sourceHandle: "",
-          targetSiteCode,
+          targetStoreDomain: targetSiteCode,
           success: false,
           message: error instanceof Error ? error.message : "读取源产品失败",
         });
@@ -793,12 +816,16 @@ export async function syncProductsToSites({
         sourceProductId: productId,
         sourceTitle: sourceProduct.title,
         sourceHandle: sourceProduct.handle,
-        targetSiteCode,
+        targetStoreDomain: targetSiteCode,
         success: false,
       };
 
       try {
-        const targetHandle = await resolveUniqueProductHandle(targetSiteCode, sourceProduct.handle);
+        const targetHandle = await resolveUniqueProductHandle(
+          targetSiteCode,
+          sourceProduct.handle,
+          customSiteConfigs,
+        );
         const variants = sourceProduct.variants.edges.map((e) => e.node);
         const defaultSingle = isDefaultSingleVariant(variants);
         const productOptions = defaultSingle ? undefined : buildProductOptionsFromVariants(variants);
@@ -819,6 +846,7 @@ export async function syncProductsToSites({
           productOptions,
           metafields,
           media,
+          customSiteConfigs,
         });
 
         if (createResult.userError && metafields.length > 0) {
@@ -829,6 +857,7 @@ export async function syncProductsToSites({
             productOptions,
             metafields: [],
             media,
+            customSiteConfigs,
           });
           row.message = `产品级元字段在目标站写入失败，已重试不包含产品 metafields。原因：${createResult.userError}`;
         }
@@ -845,6 +874,7 @@ export async function syncProductsToSites({
           variants,
           firstVariantId: createResult.firstVariantId,
           defaultSingle,
+          customSiteConfigs,
         });
 
         if (variantError) {

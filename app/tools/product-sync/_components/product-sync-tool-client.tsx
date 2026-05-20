@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AddCustomSiteDialog } from "@/app/tools/_components/add-custom-site-dialog";
+import { useCustomSiteOptions } from "@/app/tools/_components/use-custom-site-options";
 import { CustomSelect } from "@/components/data-entry/custom-select";
 import {
   Dialog,
@@ -10,14 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { RuntimeSiteOption } from "@/lib/config/runtime-sites";
 
 import { SHOPIFY_PRODUCT_LIST_LIMIT, SHOPIFY_PRODUCT_SYNC_BATCH } from "@/lib/constants/shopify";
-
-type SiteOption = {
-  code: string;
-  label: string;
-  storeDomain: string;
-};
 
 type SiteProductListItem = {
   id: string;
@@ -34,7 +31,7 @@ type SiteProductListItem = {
 };
 
 type ListApiResponse = {
-  siteCode: string;
+  storeDomain: string;
   first: number;
   count: number;
   items: SiteProductListItem[];
@@ -45,7 +42,7 @@ type SyncResultItem = {
   sourceProductId: string;
   sourceTitle: string;
   sourceHandle: string;
-  targetSiteCode: string;
+  targetStoreDomain: string;
   success: boolean;
   targetProductId?: string;
   targetHandle?: string;
@@ -74,12 +71,13 @@ function datetimeShort(iso: string): string {
   return date.toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption[] }) {
-  const [sourceSiteCode, setSourceSiteCode] = useState(siteOptions[0]?.code ?? "");
-  const [targetSiteCodes, setTargetSiteCodes] = useState<string[]>(() => {
-    const src = siteOptions[0]?.code;
-    const other = siteOptions.find((s) => s.code !== src);
-    return other ? [other.code] : [];
+export function ProductSyncToolClient({ siteOptions: initialSiteOptions }: { siteOptions: RuntimeSiteOption[] }) {
+  const { isReady, siteOptions, customSiteConfigMap, addCustomSite } = useCustomSiteOptions(initialSiteOptions);
+  const [sourceStoreDomain, setSourceStoreDomain] = useState(siteOptions[0]?.storeDomain ?? "");
+  const [targetStoreDomains, setTargetStoreDomains] = useState<string[]>(() => {
+    const src = siteOptions[0]?.storeDomain;
+    const other = siteOptions.find((s) => s.storeDomain !== src);
+    return other ? [other.storeDomain] : [];
   });
   const [items, setItems] = useState<SiteProductListItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -96,11 +94,11 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
   const [syncSummary, setSyncSummary] = useState<SyncApiResponse | null>(null);
 
   const selectableTargetSites = useMemo(
-    () => siteOptions.filter((site) => site.code !== sourceSiteCode),
-    [siteOptions, sourceSiteCode],
+    () => siteOptions.filter((site) => site.storeDomain !== sourceStoreDomain),
+    [siteOptions, sourceStoreDomain],
   );
 
-  const sourceStoreDomain = siteOptions.find((s) => s.code === sourceSiteCode)?.storeDomain ?? "";
+  const sourceStoreDomainUrl = sourceStoreDomain;
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
@@ -131,8 +129,8 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
   const selectedCount = selectedIds.length;
   const allSelectedOnPage = pagedItems.length > 0 && pagedItems.every((item) => selectedIdSet.has(item.id));
 
-  const loadProducts = async (siteCode: string, shopifyQuery?: string) => {
-    if (!siteCode) {
+  const loadProducts = async (storeDomain: string, shopifyQuery?: string) => {
+    if (!storeDomain) {
       setItems([]);
       setSelectedIds([]);
       return;
@@ -147,9 +145,10 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          siteCode,
+          storeDomain,
           first: SHOPIFY_PRODUCT_LIST_LIMIT,
           query: shopifyQuery?.trim() || undefined,
+          customSiteConfigs: customSiteConfigMap,
         }),
       });
 
@@ -177,20 +176,25 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
     const q = shopifyQueryDraft.trim();
     setShopifyQueryApplied(q);
     setCurrentPage(1);
-    void loadProducts(sourceSiteCode, q || undefined);
+    void loadProducts(sourceStoreDomain, q || undefined);
   };
 
   useEffect(() => {
-    const code = siteOptions[0]?.code ?? "";
-    if (!code) {
+    if (!isReady || sourceStoreDomain) {
       return;
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 挂载时预拉取产品列表
-    void loadProducts(code, undefined);
-    // siteOptions 来自服务端 page，首屏稳定
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const storeDomain = siteOptions[0]?.storeDomain ?? "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 初始化默认源店铺
+    setSourceStoreDomain(storeDomain);
+    const others = siteOptions.filter((s) => s.storeDomain !== storeDomain);
+    setTargetStoreDomains(others[0]?.storeDomain ? [others[0].storeDomain] : []);
+
+    if (storeDomain) {
+      void loadProducts(storeDomain, undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在店铺列表就绪且未选中店铺时初始化
+  }, [isReady, sourceStoreDomain, siteOptions]);
 
   const toggleSingle = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -211,8 +215,8 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
   };
 
   const doSync = async (productIds: string[]) => {
-    if (!sourceSiteCode || targetSiteCodes.length < 1) {
-      setErrorMessage("请选择源站点和至少一个目标站点。");
+    if (!sourceStoreDomain || targetStoreDomains.length < 1) {
+      setErrorMessage("请选择源店铺和至少一个目标店铺。");
       return;
     }
 
@@ -230,9 +234,10 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceSiteCode,
-          targetSiteCodes,
+          sourceStoreDomain,
+          targetStoreDomains,
           productIds,
+          customSiteConfigs: customSiteConfigMap,
         }),
       });
 
@@ -256,8 +261,8 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
       return;
     }
 
-    if (targetSiteCodes.length < 1) {
-      setErrorMessage("请选择至少一个目标站点。");
+    if (targetStoreDomains.length < 1) {
+      setErrorMessage("请选择至少一个目标店铺。");
       return;
     }
 
@@ -289,41 +294,41 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
     await doSync(failedIds);
   };
 
-  const toggleTargetSiteCode = (siteCode: string) => {
-    setTargetSiteCodes((prev) =>
-      prev.includes(siteCode) ? prev.filter((c) => c !== siteCode) : [...prev, siteCode],
+  const toggleTargetStoreDomain = (storeDomain: string) => {
+    setTargetStoreDomains((prev) =>
+      prev.includes(storeDomain) ? prev.filter((c) => c !== storeDomain) : [...prev, storeDomain],
     );
   };
 
   return (
     <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-4 rounded-xl border border-zinc-200/80 bg-white p-5 shadow-sm transition-all duration-300">
       <div className="space-y-1">
-        <h1 className="text-lg font-semibold tracking-tight text-zinc-900">跨站点产品同步</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-zinc-900">跨店铺产品同步</h1>
         <p className="text-xs leading-relaxed text-zinc-500">
-          拉取源站产品列表，多选后同步到目标站；目标站若已占用 handle 会自动改为{" "}
+          拉取源店铺产品列表，多选后同步到目标店铺；目标店铺若已占用 handle 会自动改为{" "}
           <code className="rounded-md border border-zinc-200/80 bg-zinc-100/50 px-1 py-0.5 font-mono text-zinc-600">-copy</code> /{" "}
           <code className="rounded-md border border-zinc-200/80 bg-zinc-100/50 px-1 py-0.5 font-mono text-zinc-600">-copy-2</code>… 同步含标题、描述、厂商、类型、标签、SEO、图片、变体价格/SKU
           及元字段（目标站需有对应 metafield 定义时才能写入）。不包含库存数量与各销售渠道上架状态。
         </p>
       </div>
 
-      {/* 筛选：站点 */}
+      {/* 筛选：店铺 */}
       <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <label className="grid gap-1 text-xs font-medium text-zinc-700">
-          源站点
+          源店铺
           <CustomSelect
-            value={sourceSiteCode}
+            value={sourceStoreDomain}
             options={siteOptions.map((site) => ({
               label: site.label,
-              value: site.code,
+              value: site.storeDomain,
               description: site.storeDomain,
             }))}
             onChange={(next) => {
-              setSourceSiteCode(next);
+              setSourceStoreDomain(next);
               setShopifyQueryDraft("");
               setShopifyQueryApplied("");
-              const others = siteOptions.filter((s) => s.code !== next);
-              setTargetSiteCodes(others[0]?.code ? [others[0].code] : []);
+              const others = siteOptions.filter((s) => s.storeDomain !== next);
+              setTargetStoreDomains(others[0]?.storeDomain ? [others[0].storeDomain] : []);
               setCurrentPage(1);
               void loadProducts(next, undefined);
             }}
@@ -333,15 +338,15 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
         </label>
 
         <div className="grid gap-1 text-xs font-medium text-zinc-700">
-          <span>目标站点</span>
+          <span>目标店铺</span>
           <div className="flex min-h-8 flex-wrap gap-1 rounded-md border border-zinc-200 bg-zinc-50/50 px-2 py-1 shadow-sm transition-all">
             {selectableTargetSites.map((site) => (
               <button
-                key={site.code}
+                key={site.storeDomain}
                 type="button"
-                onClick={() => toggleTargetSiteCode(site.code)}
+                onClick={() => toggleTargetStoreDomain(site.storeDomain)}
                 className={`cursor-pointer rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-all active:scale-95 ${
-                  targetSiteCodes.includes(site.code)
+                  targetStoreDomains.includes(site.storeDomain)
                     ? "bg-zinc-900 text-white shadow-sm ring-1 ring-zinc-900"
                     : "bg-white text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
@@ -352,24 +357,27 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void loadProducts(sourceSiteCode, shopifyQueryApplied.trim() || undefined)}
-          disabled={isLoading}
-          className="h-8 cursor-pointer rounded-md border border-zinc-200 bg-white px-3.5 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
-        >
-          {isLoading ? (
-            <span className="flex items-center gap-1.5">
-              <svg className="h-3.5 w-3.5 animate-spin text-zinc-500" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              加载中…
-            </span>
-          ) : (
-            "刷新列表"
-          )}
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          <AddCustomSiteDialog onAdd={addCustomSite} />
+          <button
+            type="button"
+            onClick={() => void loadProducts(sourceStoreDomain, shopifyQueryApplied.trim() || undefined)}
+            disabled={isLoading}
+            className="h-8 cursor-pointer rounded-md border border-zinc-200 bg-white px-3.5 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+          >
+            {isLoading ? (
+              <span className="flex items-center gap-1.5">
+                <svg className="h-3.5 w-3.5 animate-spin text-zinc-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                加载中…
+              </span>
+            ) : (
+              "刷新列表"
+            )}
+          </button>
+        </div>
       </div>
 
       {/* 筛选：列表内 */}
@@ -473,7 +481,7 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
           <button
             type="button"
             onClick={handleSyncClick}
-            disabled={isSyncing || selectedCount < 1 || targetSiteCodes.length < 1}
+            disabled={isSyncing || selectedCount < 1 || targetStoreDomains.length < 1}
             className="h-7 cursor-pointer rounded-md bg-zinc-900 px-3.5 text-[11px] font-medium text-white shadow-sm transition-all hover:bg-zinc-800 hover:shadow active:scale-95 disabled:pointer-events-none disabled:opacity-40"
           >
             {isSyncing ? (
@@ -504,7 +512,7 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
         {pagedItems.map((item) => {
           const checked = selectedIdSet.has(item.id);
           const adminHref =
-            sourceStoreDomain && item.id ? `https://${sourceStoreDomain}${gidToAdminProductPath(item.id)}` : "";
+            sourceStoreDomainUrl && item.id ? `https://${sourceStoreDomainUrl}${gidToAdminProductPath(item.id)}` : "";
 
           return (
             <div
@@ -635,14 +643,17 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
           <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
             {syncSummary.results.map((r) => (
               <div
-                key={`${r.sourceProductId}-${r.targetSiteCode}`}
+                key={`${r.sourceProductId}-${r.targetStoreDomain}`}
                 className={`rounded-lg border px-2.5 py-2 text-[11px] leading-snug transition-all ${
                   r.success ? "border-emerald-200/80 bg-emerald-50/50 text-emerald-900" : "border-amber-200/80 bg-amber-50/50 text-amber-900"
                 }`}
               >
                 <div className="font-medium">{r.sourceTitle}</div>
                 <div className="mt-0.5 text-zinc-600">
-                  → <span className="font-medium">{r.targetSiteCode.toUpperCase()}</span>
+                  →{" "}
+                  <span className="font-medium">
+                    {siteOptions.find((item) => item.storeDomain === r.targetStoreDomain)?.label ?? r.targetStoreDomain}
+                  </span>
                   {r.targetHandle ? (
                     <span className="ml-1.5 font-mono text-[10px] text-zinc-500">
                       {r.sourceHandle && r.sourceHandle !== r.targetHandle
@@ -664,7 +675,7 @@ export function ProductSyncToolClient({ siteOptions }: { siteOptions: SiteOption
             <DialogTitle>确认同步</DialogTitle>
             <DialogDescription>
               将 <b className="text-foreground">{selectedCount}</b> 个产品同步到{" "}
-              <b className="text-foreground">{targetSiteCodes.length}</b> 个目标站（最多{" "}
+              <b className="text-foreground">{targetStoreDomains.length}</b> 个目标店铺（最多{" "}
               {SHOPIFY_PRODUCT_SYNC_BATCH} 个 / 次）。目标站会新建产品；handle 冲突会自动追加{" "}
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-foreground">-copy</code> 等后缀。
             </DialogDescription>

@@ -4,8 +4,8 @@ import { ProductSyncToolClient } from "@/app/tools/product-sync/_components/prod
 import { listAvailableSiteOptions } from "@/lib/config/sites";
 
 export const metadata = {
-  title: "跨站点产品同步",
-  description: "从源站点读取产品并同步到目标站点，自动避让已占用的 handle。",
+  title: "跨店铺产品同步",
+  description: "从源店铺读取产品并同步到目标店铺，自动避让已占用的 handle。",
 };
 
 export default function ProductSyncToolPage() {
@@ -34,16 +34,7 @@ export default function ProductSyncToolPage() {
         </Link>
       </div>
 
-      {siteOptions.length > 1 ? (
-        <ProductSyncToolClient siteOptions={siteOptions} />
-      ) : (
-        <div className="mx-auto w-full max-w-xl rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          跨站点产品同步至少需要两个已配置站点。请先在 `.env.local` 中配置至少两组
-          `*_SHOPIFY_STORE_DOMAIN` 与 `*_SHOPIFY_ADMIN_ACCESS_TOKEN`（需含
-          <code className="rounded bg-amber-100 px-1">read_products</code> 与{" "}
-          <code className="rounded bg-amber-100 px-1">write_products</code> 权限）。
-        </div>
-      )}
+      <ProductSyncToolClient siteOptions={siteOptions} />
     </main>
   );
 }

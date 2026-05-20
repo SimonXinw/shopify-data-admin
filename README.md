@@ -1,6 +1,6 @@
 # Shopify Data Admin
 
-基于 **Next.js App Router** 的内部工具控制台，用于跨多个 Shopify 站点的文件与数据操作。当前围绕 **Shopify Admin GraphQL** 提供 Files 批量上传、跨站图片同步与跨站产品同步；后续可扩展到元字段、元对象等更多跨店铺数据治理能力。
+基于 **Next.js App Router** 的内部工具控制台，用于跨多个 Shopify 店铺的文件与数据操作。当前围绕 **Shopify Admin GraphQL** 提供 Files 批量上传、跨店铺图片同步与跨店铺产品同步；后续可扩展到元字段、元对象等更多跨店铺数据治理能力。
 
 ## 技术栈
 
@@ -29,7 +29,7 @@ pnpm dev
 | `pnpm start` | 运行生产构建后的服务 |
 | `pnpm lint` | 运行 ESLint 检查 |
 
-首次启动前请按照下面「环境变量」章节，复制 `.example.env` 为 `.env.local` 并填入至少一个站点的真实配置。
+首次启动前请按照下面「环境变量」章节，复制 `.example.env` 为 `.env.local` 并填入至少一个店铺的真实配置。
 
 ## 页面与业务模块
 
@@ -38,20 +38,20 @@ pnpm dev
 | 路径 | 页面 | 业务说明 |
 | --- | --- | --- |
 | `/` | 工具控制台首页 | 列出当前已上线的工具卡片入口，作为未来更多数据工具的导航中心。 |
-| `/tools/image-upload` | 批量上传图片到 Shopify | 选择站点 → 多选本地图片 → 调用后端走 `stagedUploadsCreate` + `fileCreate` 写入对应站点 Shopify 后台 `Content > Files`，返回每个文件的上传结果与 CDN 链接。 |
+| `/tools/image-upload` | 批量上传图片到 Shopify | 选择店铺（下拉显示店铺名-国家，`value` 为店铺域名）→ 多选本地图片 → 调用后端走 `stagedUploadsCreate` + `fileCreate` 写入对应店铺 Shopify 后台 `Content > Files`，返回每个文件的上传结果与 CDN 链接。 |
 | `/tools/image-download` | 页面媒体提取 | 输入页面 URL，服务端以浏览器请求头抓取 SSR HTML（如 Shopify Liquid 渲染页），解析图片与视频链接；支持多选复制、单张 / 批量 ZIP 下载，亦可手动添加 URL 或从 JSON 提取 `shopify://shop_images/`。 |
-| `/tools/file-sync` | 跨站点图片同步 | 读取源站点 Shopify Files 列表，多选后同步到其他站点，并查看每项同步结果与目标 CDN。 |
-| `/tools/product-sync` | 跨站点产品同步 | 选择源站点拉取产品列表（支持 Shopify 搜索语法与本地筛选），多选后同步到一个或多个目标站点；目标站若已占用 handle 会自动追加 `-copy` / `-copy-2` 等后缀。需至少 2 个站点且 Admin Token 含 `read_products`、`write_products`。 |
+| `/tools/file-sync` | 跨店铺图片同步 | 读取源店铺 Shopify Files 列表，多选后同步到其他店铺，并查看每项同步结果与目标 CDN。支持页面内新增临时店铺并立即生效。 |
+| `/tools/product-sync` | 跨店铺产品同步 | 选择源店铺拉取产品列表（支持 Shopify 搜索语法与本地筛选），多选后同步到一个或多个目标店铺；目标店铺若已占用 handle 会自动追加 `-copy` / `-copy-2` 等后缀。支持页面内新增临时店铺并立即生效（需至少 2 个店铺，Token 含 `read_products`、`write_products`）。 |
 
 对应的后端 HTTP 接口：
 
 | 方法 | 路径 | 入参 | 说明 |
 | --- | --- | --- | --- |
 | `POST` | `/api/tools/page-media/extract` | JSON：`url`（http/https 页面地址） | 以当前请求的浏览器头抓取目标页 HTML 并解析媒体 URL 列表；**不代理下载文件**，图片/视频由用户浏览器直连 CDN 下载。 |
-| `POST` | `/api/tools/shopify/files/upload` | `multipart/form-data`：`siteCode`、`files[]`，可选 `altPrefix` | 批量将本地文件上传到指定站点的 Shopify Files。 |
-| `POST` | `/api/tools/shopify/files/list` | JSON：`siteCode`，可选 `first`（默认 250，服务端会裁剪到 1–250） | 列出某站点的图片类型文件。 |
-| `POST` | `/api/tools/shopify/products/list` | JSON：`siteCode`，可选 `first`（默认 100，上限 100）、`query`（Shopify `products` 查询语法，可省略） | 列出某站点最近更新的产品摘要（标题、handle、状态、主图、变体数量等）。 |
-| `POST` | `/api/tools/shopify/products/sync` | JSON：`sourceSiteCode`、`targetSiteCodes[]`、`productIds[]`（单次最多 20 个） | 将源站指定产品复制到目标站（含变体、媒体 URL、产品/变体 metafields 等；不含库存数量与销售渠道发布）。 |
+| `POST` | `/api/tools/shopify/files/upload` | `multipart/form-data`：`storeDomain`、`files[]`，可选 `altPrefix`、`customSiteConfigs` | 批量将本地文件上传到指定店铺的 Shopify Files。 |
+| `POST` | `/api/tools/shopify/files/list` | JSON：`storeDomain`，可选 `first`（默认 250，服务端会裁剪到 1–250）、`customSiteConfigs` | 列出某店铺的图片类型文件。`customSiteConfigs` 可传页面临时新增店铺配置。 |
+| `POST` | `/api/tools/shopify/products/list` | JSON：`storeDomain`，可选 `first`（默认 100，上限 100）、`query`（Shopify `products` 查询语法，可省略）、`customSiteConfigs` | 列出某店铺最近更新的产品摘要（标题、handle、状态、主图、变体数量等）。 |
+| `POST` | `/api/tools/shopify/products/sync` | JSON：`sourceStoreDomain`、`targetStoreDomains[]`、`productIds[]`（单次最多 20 个），可选 `customSiteConfigs` | 将源店铺指定产品复制到目标店铺（含变体、媒体 URL、产品/变体 metafields 等；不含库存数量与销售渠道发布）。 |
 
 ## 目录结构与职责规范
 
@@ -62,16 +62,17 @@ shopify-data-admin/
 │  ├─ layout.tsx           # 根 layout（字体、全局样式）
 │  ├─ globals.css          # 全局样式
 │  ├─ tools/
+│  │  ├─ _components/      # 工具页共享客户端组件（如临时店铺配置弹窗/Hook）
 │  │  ├─ image-upload/     # 批量上传图片页面
 │  │  │  ├─ page.tsx
 │  │  │  └─ _components/   # 仅本页面使用的客户端组件（带下划线，不参与路由）
 │  │  ├─ image-download/   # 页面媒体提取（抓取页面图片 / 视频 URL）
 │  │  │  ├─ page.tsx
 │  │  │  └─ _components/
-│  │  ├─ file-sync/        # 跨站点图片同步页面
+│  │  ├─ file-sync/        # 跨店铺图片同步页面
 │  │  │  ├─ page.tsx
 │  │  │  └─ _components/
-│  │  └─ product-sync/    # 跨站点产品同步页面
+│  │  └─ product-sync/    # 跨店铺产品同步页面
 │  │     ├─ page.tsx
 │  │     └─ _components/
 │  └─ api/tools/
@@ -80,32 +81,33 @@ shopify-data-admin/
 │     ├─ files/
 │     │  ├─ upload/route.ts   # 批量上传接口
 │     │  ├─ list/route.ts     # 文件列表接口
-│     │  └─ sync/route.ts     # 跨站点文件同步接口
+│     │  └─ sync/route.ts     # 跨店铺文件同步接口
 │     └─ products/
 │        ├─ list/route.ts     # 产品列表接口
-│        └─ sync/route.ts     # 跨站点产品同步接口
+│        └─ sync/route.ts     # 跨店铺产品同步接口
 ├─ components/             # 全局共享的通用 UI 组件库
 │  ├─ ui/                  # shadcn/ui 风格基础组件（button、dialog、select 等）
-│  └─ data-entry/          # 业务友好的数据录入组合组件（如站点选择下拉框）
+│  └─ data-entry/          # 业务友好的数据录入组合组件（如店铺选择下拉框）
 ├─ lib/                    # 服务端业务实现（标记 "server-only"，不可被客户端组件直接 import）
 │  ├─ config/
-│  │  └─ sites.ts          # 多站点配置：env 读取、可用站点列表、按 siteCode 取配置
+│  │  ├─ sites.ts          # 多店铺配置：按店铺域名映射 env 变量名、读取可用店铺
+│  │  └─ runtime-sites.ts  # 运行时店铺配置规范化（支持页面临时新增店铺透传）
 │  ├─ constants/
 │  │  └─ shopify.ts        # 本工具的 Shopify 常量（API 路径、单批文件上限等）
 │  └─ shopify/
 │     ├─ admin-client.ts   # 统一发起 Admin GraphQL 请求，处理错误
 │     ├─ storefront.ts     # Storefront GraphQL 聚合导出（对外优先从此 import）
 │     ├─ storefront/       # Storefront 业务封装（购物车、商品等）  
-│     ├─ files.ts          # 单站点批量上传逻辑（stagedUploadsCreate → upload → fileCreate）
-│     ├─ file-sync.ts      # 跨站点文件列表与同步逻辑
-│     └─ product-sync.ts   # 跨站点产品列表与同步逻辑（handle 避让、变体 bulk 等）
+│     ├─ files.ts          # 单店铺批量上传逻辑（stagedUploadsCreate → upload → fileCreate）
+│     ├─ file-sync.ts      # 跨店铺文件列表与同步逻辑
+│     └─ product-sync.ts   # 跨店铺产品列表与同步逻辑（handle 避让、变体 bulk 等）
 ├─ src/
 │  └─ consts/valerion/     # Valerion 品牌侧共享常量（与前台 / 其它包对齐）
 │     ├─ index.ts          # storefront 通用常量（排序、TAGS、GraphQL 路径片段等）
 │     ├─ shopify/constants.ts  # Storefront / Admin GraphQL 路径与 API 版本（VALERION_SHOPIFY_*）
 │     └─ klaviyo/index.ts  # Klaviyo 相关常量（当前 Admin 工具未直接使用）
 ├─ public/                 # 静态资源
-├─ .example.env            # 环境变量模板（含全部支持站点的示例值）
+├─ .example.env            # 环境变量模板（含默认店铺映射示例）
 ├─ AGENTS.md               # AI / 协作约定
 ├─ next.config.ts
 ├─ tsconfig.json
@@ -117,7 +119,7 @@ shopify-data-admin/
 - **`app/`**：仅放页面、布局、API Route 与本路由专属组件。本路由专属组件统一放到 `_components/`（下划线前缀，App Router 会忽略其作为路由）。页面层不直接拼装 Shopify GraphQL，业务调用 `lib/` 暴露的函数或 `app/api/...` 接口。
 - **`components/`**：跨页面/全局复用的 UI 组件库。`components/ui` 放 shadcn/ui 风格基础组件，`components/data-entry` 等目录放业务友好的组合组件。
 - **`lib/`**：服务端业务模块，**文件首行使用 `import "server-only";`**，禁止在 Client Component 中 import。
-  - `lib/config/`：环境与多站点配置读取。
+  - `lib/config/`：环境与多店铺配置读取。
   - `lib/constants/`：项目内引用的常量；如果是与品牌前台共享的常量，应放到 `src/consts/valerion/` 并由此处 re-export，避免双写。
   - `lib/shopify/`：所有 Shopify Admin GraphQL 调用与业务封装。
 - **`src/consts/valerion/`**：与 Valerion 前台 / 其它包共用的纯常量，**不允许写副作用 / 不依赖运行时**，方便跨包复用。
@@ -132,13 +134,13 @@ shopify-data-admin/
 cp .example.env .env.local
 ```
 
-每个站点一组，使用大写站点码 + 下划线作为前缀：
+每个店铺一组环境变量，前台 `value` 使用 `storeDomain`，服务端通过映射关系定位到对应 env 变量名：
 
-- `JP_SHOPIFY_STORE_DOMAIN`、`JP_SHOPIFY_ADMIN_ACCESS_TOKEN`
-- `US_SHOPIFY_STORE_DOMAIN`、`US_SHOPIFY_ADMIN_ACCESS_TOKEN`
-- 其它支持的站点码：`eu`、`de`、`fr`、`uk`、`ca`、`au`、`global`、`cn`
+- `storeDomain=valerionjp.myshopify.com` → `JP_SHOPIFY_STORE_DOMAIN`、`JP_SHOPIFY_ADMIN_ACCESS_TOKEN`
+- `storeDomain=valerion-fr.myshopify.com` → `FR_SHOPIFY_STORE_DOMAIN`、`FR_SHOPIFY_ADMIN_ACCESS_TOKEN`
+- 其它默认映射请查看 `lib/config/sites.ts`
 
-只有当某站点的 **两项** 变量都填写后，该站点才会出现在工具下拉列表中。具体读取与校验见 `lib/config/sites.ts` 的 `listAvailableSiteOptions` / `getSiteConfigOrThrow`。使用「跨站产品同步」时，请确认各站 Admin Token 已勾选 **read_products** 与 **write_products**（图片类工具另需 `read_files` / `write_files`）。
+只有当某店铺映射的 **两项** 变量都填写后，该店铺会作为默认可选项出现。除此之外，也可以在工具页点击“新增临时店铺”并填写店铺显示名称、店铺域名、Admin Token（保存在当前浏览器 `localStorage`，当天有效，次日自动失效）。具体读取与校验见 `lib/config/sites.ts` 与 `lib/config/runtime-sites.ts`。使用「跨店铺产品同步」时，请确认各店铺 Admin Token 已勾选 **read_products** 与 **write_products**（图片类工具另需 `read_files` / `write_files`）。
 
 ## Shopify API 版本来源
 

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { type RuntimeSiteConfigMap } from "@/lib/config/runtime-sites";
 import { SHOPIFY_FILE_BATCH_LIMIT } from "@/lib/constants/shopify";
 import { shopifyAdminRequest } from "@/lib/shopify/admin-client";
 
@@ -17,7 +18,7 @@ export type SiteImageItem = {
 export type FileSyncResultItem = {
   sourceFileId: string;
   sourceFileName: string;
-  targetSiteCode: string;
+  targetStoreDomain: string;
   success: boolean;
   targetFileId?: string;
   targetFileStatus?: string;
@@ -175,11 +176,13 @@ async function pollReadyFileState({
   fileId,
   initialStatus,
   initialUrl,
+  customSiteConfigs,
 }: {
   siteCode: string;
   fileId: string;
   initialStatus: string;
   initialUrl?: string;
+  customSiteConfigs?: RuntimeSiteConfigMap;
 }): Promise<{ fileStatus: string; fileUrl?: string }> {
   let fileStatus = initialStatus;
   let fileUrl = initialUrl;
@@ -194,9 +197,10 @@ async function pollReadyFileState({
   for (let retry = 0; retry < RETRY_COUNT; retry += 1) {
     await sleep(RETRY_DELAY_MS);
     const nodeData = await shopifyAdminRequest<FileNodeData>({
-      siteCode,
+      storeDomain: siteCode,
       query: FILE_NODE_QUERY,
       variables: { id: fileId },
+      customSiteConfigs,
     });
 
     if (!nodeData.node) {
@@ -214,15 +218,20 @@ async function pollReadyFileState({
   return { fileStatus, fileUrl };
 }
 
-export async function listSiteImages(siteCode: string, first = 250): Promise<SiteImageItem[]> {
+export async function listSiteImages(
+  siteCode: string,
+  first = 250,
+  options: { customSiteConfigs?: RuntimeSiteConfigMap } = {},
+): Promise<SiteImageItem[]> {
   const normalizedFirst = Math.min(250, Math.max(1, Math.floor(first)));
 
   const data = await shopifyAdminRequest<FilesListData>({
-    siteCode,
+    storeDomain: siteCode,
     query: LIST_SITE_IMAGES_QUERY,
     variables: {
       first: normalizedFirst,
     },
+    customSiteConfigs: options.customSiteConfigs,
   });
 
   return data.files.edges
@@ -247,10 +256,12 @@ export async function syncImagesToSite({
   sourceSiteCode,
   targetSiteCodes,
   fileIds,
+  customSiteConfigs,
 }: {
   sourceSiteCode: string;
   targetSiteCodes: string[];
   fileIds: string[];
+  customSiteConfigs?: RuntimeSiteConfigMap;
 }): Promise<FileSyncResultItem[]> {
   const normalizedTargetSiteCodes = Array.from(
     new Set(
@@ -276,9 +287,10 @@ export async function syncImagesToSite({
   for (const sourceFileId of fileIds) {
     try {
       const sourceNodeData = await shopifyAdminRequest<SourceImageNodeData>({
-        siteCode: sourceSiteCode,
+        storeDomain: sourceSiteCode,
         query: SOURCE_IMAGE_NODE_QUERY,
         variables: { id: sourceFileId },
+        customSiteConfigs,
       });
 
       if (!sourceNodeData.node) {
@@ -286,7 +298,7 @@ export async function syncImagesToSite({
           results.push({
             sourceFileId,
             sourceFileName: sourceFileId,
-            targetSiteCode,
+            targetStoreDomain: targetSiteCode,
             success: false,
             message: "源文件不存在或不属于图片类型。",
           });
@@ -300,7 +312,7 @@ export async function syncImagesToSite({
           results.push({
             sourceFileId,
             sourceFileName: sourceFileId,
-            targetSiteCode,
+            targetStoreDomain: targetSiteCode,
             success: false,
             message: "源文件未返回可同步的 URL。",
           });
@@ -314,13 +326,13 @@ export async function syncImagesToSite({
         const result: FileSyncResultItem = {
           sourceFileId,
           sourceFileName,
-          targetSiteCode,
+          targetStoreDomain: targetSiteCode,
           success: false,
         };
 
         try {
           const fileCreateData = await shopifyAdminRequest<FileCreateData>({
-            siteCode: targetSiteCode,
+            storeDomain: targetSiteCode,
             query: FILE_CREATE_MUTATION,
             variables: {
               files: [
@@ -331,6 +343,7 @@ export async function syncImagesToSite({
                 },
               ],
             },
+            customSiteConfigs,
           });
 
           const userErrors = fileCreateData.fileCreate.userErrors;
@@ -352,6 +365,7 @@ export async function syncImagesToSite({
             fileId: createdFile.id,
             initialStatus: createdFile.fileStatus,
             initialUrl: createdFile.image?.url ?? undefined,
+            customSiteConfigs,
           });
 
           result.success = true;
@@ -372,7 +386,7 @@ export async function syncImagesToSite({
         results.push({
           sourceFileId,
           sourceFileName: sourceFileId,
-          targetSiteCode,
+          targetStoreDomain: targetSiteCode,
           success: false,
           message: error instanceof Error ? error.message : "同步失败",
         });

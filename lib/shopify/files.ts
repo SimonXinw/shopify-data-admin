@@ -1,5 +1,6 @@
 import "server-only";
 
+import { type RuntimeSiteConfigMap } from "@/lib/config/runtime-sites";
 import { SHOPIFY_FILE_BATCH_LIMIT } from "@/lib/constants/shopify";
 import { shopifyAdminRequest } from "@/lib/shopify/admin-client";
 
@@ -238,11 +239,13 @@ async function pollFileReadyState({
   fileId,
   initialStatus,
   initialUrl,
+  customSiteConfigs,
 }: {
   siteCode: string;
   fileId: string;
   initialStatus: string;
   initialUrl?: string;
+  customSiteConfigs?: RuntimeSiteConfigMap;
 }): Promise<{ fileStatus: string; fileUrl?: string }> {
   let latestStatus = initialStatus;
   let latestUrl = initialUrl;
@@ -258,9 +261,10 @@ async function pollFileReadyState({
     await sleep(RETRY_DELAY_MS);
 
     const nodeData = await shopifyAdminRequest<FileNodeData>({
-      siteCode,
+      storeDomain: siteCode,
       query: FILE_NODE_QUERY,
       variables: { id: fileId },
+      customSiteConfigs,
     });
 
     if (!nodeData.node) {
@@ -282,10 +286,12 @@ export async function batchUploadFilesToShopify({
   siteCode,
   files,
   altPrefix,
+  customSiteConfigs,
 }: {
   siteCode: string;
   files: File[];
   altPrefix?: string;
+  customSiteConfigs?: RuntimeSiteConfigMap;
 }): Promise<UploadResultItem[]> {
   validateIncomingFiles(files);
 
@@ -312,11 +318,12 @@ export async function batchUploadFilesToShopify({
       ];
 
       const stagedData = await shopifyAdminRequest<StagedUploadData>({
-        siteCode,
+        storeDomain: siteCode,
         query: STAGED_UPLOADS_CREATE_MUTATION,
         variables: {
           input: stagedUploadInput,
         },
+        customSiteConfigs,
       });
 
       const stagedErrors = stagedData.stagedUploadsCreate.userErrors;
@@ -336,7 +343,7 @@ export async function batchUploadFilesToShopify({
       await uploadBinaryToStagedTarget(stagedTarget, file);
 
       const fileCreateData = await shopifyAdminRequest<FileCreateData>({
-        siteCode,
+        storeDomain: siteCode,
         query: FILE_CREATE_MUTATION,
         variables: {
           files: [
@@ -347,6 +354,7 @@ export async function batchUploadFilesToShopify({
             },
           ],
         },
+        customSiteConfigs,
       });
 
       const createErrors = fileCreateData.fileCreate.userErrors;
@@ -372,6 +380,7 @@ export async function batchUploadFilesToShopify({
         fileId: createdFile.id,
         initialStatus: initialFileStatus,
         initialUrl: initialFileUrl,
+        customSiteConfigs,
       });
 
       item.fileStatus = readyState.fileStatus;

@@ -2,13 +2,10 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { AddCustomSiteDialog } from "@/app/tools/_components/add-custom-site-dialog";
+import { useCustomSiteOptions } from "@/app/tools/_components/use-custom-site-options";
 import { CustomSelect } from "@/components/data-entry/custom-select";
-
-type SiteOption = {
-  code: string;
-  label: string;
-  storeDomain: string;
-};
+import type { RuntimeSiteOption } from "@/lib/config/runtime-sites";
 
 type UploadResult = {
   fileName: string;
@@ -96,8 +93,9 @@ function FilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
   );
 }
 
-export function UploadToolClient({ siteOptions }: { siteOptions: SiteOption[] }) {
-  const [selectedSiteCode, setSelectedSiteCode] = useState(siteOptions[0]?.code ?? "");
+export function UploadToolClient({ siteOptions: initialSiteOptions }: { siteOptions: RuntimeSiteOption[] }) {
+  const { isReady, siteOptions, customSiteConfigMap, addCustomSite } = useCustomSiteOptions(initialSiteOptions);
+  const [selectedStoreDomain, setSelectedStoreDomain] = useState(siteOptions[0]?.storeDomain ?? "");
   const [altPrefix, setAltPrefix] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -179,8 +177,8 @@ export function UploadToolClient({ siteOptions }: { siteOptions: SiteOption[] })
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!selectedSiteCode) {
-      setErrorMessage("请选择站点。");
+    if (!selectedStoreDomain) {
+      setErrorMessage("请选择店铺。");
       return;
     }
 
@@ -195,8 +193,9 @@ export function UploadToolClient({ siteOptions }: { siteOptions: SiteOption[] })
 
     try {
       const payload = new FormData();
-      payload.append("siteCode", selectedSiteCode);
+      payload.append("storeDomain", selectedStoreDomain);
       payload.append("altPrefix", altPrefix.trim());
+      payload.append("customSiteConfigs", JSON.stringify(customSiteConfigMap));
 
       for (const file of files) {
         payload.append("files", file, file.name);
@@ -224,6 +223,15 @@ export function UploadToolClient({ siteOptions }: { siteOptions: SiteOption[] })
     }
   };
 
+  useEffect(() => {
+    if (!isReady || selectedStoreDomain) {
+      return;
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 初始化默认店铺
+    setSelectedStoreDomain(siteOptions[0]?.storeDomain ?? "");
+  }, [isReady, selectedStoreDomain, siteOptions]);
+
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-8">
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
@@ -238,18 +246,22 @@ export function UploadToolClient({ siteOptions }: { siteOptions: SiteOption[] })
           <form className="grid gap-6" onSubmit={handleSubmit}>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm font-medium text-zinc-800">
-            <span>目标站点</span>
+            <span>目标店铺</span>
             <CustomSelect
-              value={selectedSiteCode}
+              value={selectedStoreDomain}
               options={siteOptions.map((site) => ({
                 label: site.label,
-                value: site.code,
+                value: site.storeDomain,
                 description: site.storeDomain,
               }))}
-              onChange={(next) => setSelectedSiteCode(next)}
+              onChange={(next) => setSelectedStoreDomain(next)}
               className="h-11 cursor-pointer rounded-lg border border-zinc-300 bg-white px-3 outline-none transition-shadow hover:border-zinc-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             />
           </label>
+
+          <div className="flex items-end">
+            <AddCustomSiteDialog onAdd={addCustomSite} />
+          </div>
 
           <label className="flex flex-col gap-2 text-sm font-medium text-zinc-800">
             <div className="flex items-center gap-2">
